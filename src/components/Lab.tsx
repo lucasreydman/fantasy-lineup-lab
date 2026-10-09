@@ -207,6 +207,24 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     setMoves({})
   }
 
+  // Reset button: everything back to how Sleeper has it, with a few seconds to undo.
+  const dirty =
+    send.length > 0 || receive.length > 0 || Object.values(moves).some((m) => Object.values(m).some((list) => list.length > 0))
+  const [undo, setUndo] = useState<{ send: string[]; receive: string[]; moves: Record<number, Moves> } | null>(null)
+  const resetAll = () => {
+    setUndo({ send, receive, moves })
+    resetTrade()
+  }
+  useEffect(() => {
+    if (!undo) return
+    const t = window.setTimeout(() => setUndo(null), 6000)
+    return () => window.clearTimeout(t)
+  }, [undo])
+  useEffect(() => {
+    // New changes after a reset: restoring the old state would now overwrite them.
+    if (dirty) setUndo(null)
+  }, [dirty])
+
   /** Something was dropped on `side`'s panel: a rostered player, a waiver pickup, or an IR player. */
   const placeOn = (side: 'me' | 'partner', data: string) => {
     const target = side === 'me' ? me : partner
@@ -286,7 +304,8 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
         players={players}
         onSend={(id, add) => setSend((s) => toggle(s, id, add))}
         onReceive={(id, add) => setReceive((r) => toggle(r, id, add))}
-        onClear={resetTrade}
+        dirty={dirty}
+        onReset={resetAll}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -342,6 +361,25 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
       )}
 
       <DropDock me={me} partner={partner} />
+      {undo && (
+        <div className="safe-bottom pop-in fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="status">
+          <div className="flex items-center gap-3 rounded-full bg-panel-3 py-2 pr-2 pl-4 text-[13px] shadow-2xl ring-1 ring-line">
+            Everything reset
+            <button
+              type="button"
+              onClick={() => {
+                setSend(undo.send)
+                setReceive(undo.receive)
+                setMoves(undo.moves)
+                setUndo(null)
+              }}
+              className="rounded-full bg-teal px-3 py-1.5 text-[12px] font-semibold text-bg transition hover:brightness-110 active:scale-95"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
       {intro && <LabProjectionsIntro ctx={blend.ctx} onClose={() => setIntro(false)} />}
     </div>
   )

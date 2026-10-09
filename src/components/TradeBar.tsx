@@ -121,14 +121,17 @@ interface Props {
   players: Map<string, Player>
   onSend: (id: string, add: boolean) => void
   onReceive: (id: string, add: boolean) => void
-  onClear: () => void
+  /** Anything to undo: a trade, or any drop / IR / pickup / keep on either team. */
+  dirty: boolean
+  onReset: () => void
 }
 
 export function TradeBar(props: Props) {
   const empty = props.send.length === 0 && props.receive.length === 0
   return (
-    <div className="rounded-2xl bg-panel p-4 ring-1 ring-line">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start">
+    <div className="relative rounded-2xl bg-panel p-4 ring-1 ring-line">
+      <ResetButton disabled={!props.dirty} onClick={props.onReset} />
+      <div className="flex flex-col gap-4 pr-24 md:flex-row md:items-start md:pr-28">
         <TradeSide
           title="You send"
           subtitle={`to ${props.partnerName}`}
@@ -148,21 +151,31 @@ export function TradeBar(props: Props) {
           onAdd={(id) => props.onReceive(id, true)}
           onRemove={(id) => props.onReceive(id, false)}
         />
-        {!empty && (
-          <button
-            type="button"
-            onClick={props.onClear}
-            className="self-start rounded-full px-3 py-1.5 text-[12px] font-medium text-muted hover:bg-panel-3 hover:text-ink"
-          >
-            Reset
-          </button>
-        )}
       </div>
       {empty && (
         <p className="mt-3 text-[12px] text-faint">
-          Drag players between the two rosters below, tap the ⇄ on a player, or add them here.
+          Drag players between the two rosters below (press and hold on a phone), tap a player for options, or add them
+          here.
         </p>
       )}
     </div>
+  )
+}
+
+function ResetButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? 'Nothing to reset yet' : 'Send every player back to their team and undo all moves'}
+      className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-panel-3 px-3 py-1.5 text-[12px] font-semibold text-ink ring-1 ring-line transition hover:bg-line active:scale-95 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-faint disabled:active:scale-100"
+    >
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M2.5 8a5.5 5.5 0 1 0 1.7-4" />
+        <path d="M2.5 2.5v3h3" />
+      </svg>
+      Reset
+    </button>
   )
 }
