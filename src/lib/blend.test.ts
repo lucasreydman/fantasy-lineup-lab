@@ -73,16 +73,14 @@ describe('rankPickups', () => {
   }
   const roster = ['qb1', 'qb2', 'rb1', 'wr1', 'wr2', 'wr3']
 
-  it('ranks by lineup gain: a QB who would start beats filling a hole worth less', () => {
+  it('never suggests a third QB, even one who would outscore the starter', () => {
+    // faQB (30) would beat qb1 (20), but two QBs is the cap in a one-QB league
     const out = rankPickups(roster, ['faQB', 'faRB', 'faWR'], ctx, (id) => pos[id])
-    // faQB (30) replaces qb1 (20): +10, even though the roster is at its QB cap
-    expect(out.map((p) => [p.id, p.gain])).toEqual([['faQB', 10], ['faRB', 6], ['faWR', 0]])
+    expect(out.map((p) => [p.id, p.gain])).toEqual([['faRB', 6], ['faWR', 0]])
   })
 
-  it('drops a capped-position add that would only sit on the bench', () => {
-    pts.faQB = 10
-    const out = rankPickups(roster, ['faQB', 'faWR'], ctx, (id) => pos[id])
-    expect(out.map((p) => p.id)).not.toContain('faQB')
-    pts.faQB = 30
+  it('does suggest a backup QB when there is only one', () => {
+    const out = rankPickups(['qb1', 'rb1', 'wr1', 'wr2', 'wr3'], ['faQB'], ctx, (id) => pos[id])
+    expect(out.map((p) => p.id)).toEqual(['faQB'])
   })
 })

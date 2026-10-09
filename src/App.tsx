@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { InstallButton, InstallSheet, useInstall } from './components/InstallApp'
 import { Lab, type LabState } from './components/Lab'
 import { Setup } from './components/Setup'
 import { Spinner, TeamAvatar } from './components/ui'
@@ -27,7 +28,8 @@ function readParams() {
     recv: list('recv'),
     from: num('from'),
     to: num('to'),
-    mode: (q.get('proj') === 'blend' ? 'blend' : q.get('proj') === 'sleeper' ? 'sleeper' : null) as ProjectionMode | null,
+    // 'blend' is the pre-rename value; old shared links keep working
+    mode: (['lab', 'blend'].includes(q.get('proj') ?? '') ? 'lab' : q.get('proj') === 'sleeper' ? 'sleeper' : null) as ProjectionMode | null,
   }
 }
 
@@ -44,6 +46,8 @@ export default function App() {
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [leagueParam, setLeagueParam] = useState(() => readParams().league)
+  const [showInstall, setShowInstall] = useState(false)
+  const install = useInstall()
 
   useEffect(() => {
     getState().then(setState, (e) => setError(e.message))
@@ -89,7 +93,7 @@ export default function App() {
             send: sameLeague ? params.send : [],
             receive: sameLeague ? params.recv : [],
             horizon: { start: from, end: to },
-            mode: params.mode ?? (safeGet('projMode') === 'blend' ? 'blend' : 'sleeper'),
+            mode: params.mode ?? (safeGet('projMode') === 'lab' ? 'lab' : 'sleeper'),
           },
         })
         setLeagueParam(leagueId)
@@ -136,12 +140,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur">
+      <header className="safe-top sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-          <button type="button" onClick={leave} className="flex items-center gap-2.5">
+          <button type="button" onClick={leave} className="flex shrink-0 items-center gap-2.5" aria-label="Lineup Lab home">
             <Logo />
-            <span className="text-[15px] font-semibold tracking-tight">Trade Lineup Lab</span>
+            <span className={`text-[16px] font-bold tracking-tight ${loaded ? 'hidden sm:inline' : ''}`}>Lineup Lab</span>
           </button>
+          {!install.installed && (
+            <div className={loaded ? 'order-last' : 'ml-auto'}>
+              <InstallButton onClick={() => setShowInstall(true)} />
+            </div>
+          )}
           {loaded && (
             <div className="ml-auto flex min-w-0 items-center gap-2.5">
               <TeamAvatar url={leagueAvatar(loaded.league.avatar)} name={loaded.league.name} size={28} />
@@ -174,14 +183,15 @@ export default function App() {
         ) : loaded ? (
           <Lab key={loaded.league.league_id} {...loaded} onStateChange={syncUrl} />
         ) : (
-          <Setup season={state.season} onPick={open} />
+          <Setup season={state.season} onPick={open} onInstall={install.installed ? undefined : () => setShowInstall(true)} />
         )}
       </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-10 text-[11px] leading-relaxed text-faint">
-        Projections from Sleeper, or the Blend (sportsbook props, game lines, ESPN, matchup, health), scored with your league's exact scoring settings. Lineups are the optimal
+      <footer className="safe-bottom mx-auto max-w-6xl px-4 pb-10 text-[11px] leading-relaxed text-faint">
+        Projections from Sleeper, or Lineup Lab's (sportsbook props, game lines, ESPN, matchup, health), scored with your league's exact scoring settings. Lineups are the optimal
         projected lineup for each week; full-week projections include games already played. Not affiliated with Sleeper.
       </footer>
+      {showInstall && <InstallSheet onClose={() => setShowInstall(false)} />}
     </div>
   )
 }
@@ -195,10 +205,5 @@ function safeGet(key: string) {
 }
 
 function Logo() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="9" fill="var(--color-teal)" />
-      <path d="M9 12h11l-3-3M23 20H12l3 3" fill="none" stroke="var(--color-bg)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return <img src="/icon.svg" alt="" width={28} height={28} className="rounded-[8px]" />
 }

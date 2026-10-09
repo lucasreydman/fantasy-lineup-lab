@@ -20,7 +20,7 @@ export function scoreStats(
 
 export type PointsFn = (playerId: string, week: number) => number
 
-export type ProjectionMode = 'sleeper' | 'blend'
+export type ProjectionMode = 'sleeper' | 'lab'
 
 export interface Scorer {
   points: PointsFn

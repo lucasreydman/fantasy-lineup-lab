@@ -14,6 +14,28 @@ const POS_COLOR: Record<string, string> = {
 export const posColor = (pos: string) => POS_COLOR[pos] ?? 'var(--color-idp)'
 
 export const fmt = (n: number) => n.toFixed(2)
+
+// Weekly projection tiers per position (strong / solid / thin), roughly PPR. Color says
+// at a glance which starters are carrying the week and which are a risk.
+const TIERS: Record<string, [strong: number, solid: number, thin: number]> = {
+  QB: [22, 16, 12],
+  RB: [16, 10.5, 7],
+  WR: [16, 10.5, 7],
+  TE: [12.5, 8, 5.5],
+  K: [10, 8, 6],
+  DEF: [10, 7, 5],
+}
+export const TIER_HINT = 'Colored by tier for the position: green strong, white solid, orange thin, gray empty'
+
+export function tierColor(pos: string, pts: number, bye = false): string {
+  if (bye || pts <= 0.05) return 'var(--color-faint)'
+  const t = TIERS[pos]
+  if (!t) return 'var(--color-ink)'
+  if (pts >= t[0]) return 'var(--color-up)'
+  if (pts >= t[1]) return 'var(--color-ink)'
+  if (pts >= t[2]) return 'color-mix(in srgb, var(--color-ink) 72%, var(--color-bg))'
+  return 'var(--color-te)'
+}
 export const fmt1 = (n: number) => n.toFixed(1)
 export const signed = (n: number, digits = 2) =>
   `${n > 0.004 ? '+' : n < -0.004 ? '−' : '±'}${Math.abs(n).toFixed(digits)}`
@@ -36,7 +58,7 @@ export function SlotBadge({ slot }: { slot: string }) {
     BENCHISH.has(slot) ? 'var(--color-muted)' : positions.length > 1 ? 'var(--color-ink)' : posColor(positions[0] ?? slot)
   return (
     <span
-      className="inline-flex h-7 w-11 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tracking-wide"
+      className="inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold tracking-wide sm:w-11 sm:text-[11px]"
       style={{ background: bg, color }}
     >
       {label}

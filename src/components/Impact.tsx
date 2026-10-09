@@ -25,7 +25,7 @@ export function HorizonPicker({ current, lastWeek, regSeasonEnd, value, onChange
   const select = 'rounded-lg bg-panel-3 px-2 py-1.5 text-[12px] font-medium outline-none ring-1 ring-line focus:ring-teal'
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex flex-wrap rounded-full bg-panel-2 p-1 ring-1 ring-line">
+      <div className="flex max-w-full overflow-x-auto rounded-full bg-panel-2 p-1 whitespace-nowrap ring-1 ring-line [scrollbar-width:none]">
         {presets.map((p) => {
           const active = p.h.start === value.start && p.h.end === value.end
           return (

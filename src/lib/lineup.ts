@@ -58,6 +58,12 @@ export interface Lineup {
   total: number
 }
 
+const BENCH_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+const benchRank = (positions: string[]) => {
+  const i = BENCH_ORDER.indexOf(positions[0])
+  return i < 0 ? BENCH_ORDER.length : i
+}
+
 /** Bonus per filled slot so the solver fills every slot it can before maximizing points. */
 const FILL_BONUS = 1000
 const INELIGIBLE = 1e9
@@ -102,9 +108,10 @@ export function optimizeLineup(slots: string[], players: LineupCandidate[]): Lin
     idxs.forEach((i, k) => (out[i] = sorted[k]))
   }
 
+  // Bench reads like Sleeper's: QB, RB, WR, TE, K, DEF, then IDP; best projection first within each.
   const bench = players
     .filter((_, j) => !used.has(j))
-    .sort((a, b) => b.points - a.points)
+    .sort((a, b) => benchRank(a.positions) - benchRank(b.positions) || b.points - a.points)
     .map((p) => p.id)
   const total = Math.round(out.reduce((s, x) => s + x.points, 0) * 100) / 100
   return { slots: out, bench, total }
@@ -159,4 +166,31 @@ function hungarian(a: number[][]): number[] {
   const ans = new Array<number>(n).fill(-1)
   for (let j = 1; j <= m; j++) if (p[j]) ans[p[j] - 1] = j - 1
   return ans
+}
+
+/**
+ * Whether an injury designation can go in this league's IR slots. IR and PUP always
+ * can; the rest are commissioner switches (`reserve_allow_out` and friends). Reads the
+ * injury designation, never Sleeper's roster `status`, which is team membership.
+ */
+export function irEligible(injury: string | null | undefined, settings: Record<string, unknown>): boolean {
+  switch (injury) {
+    case 'IR':
+    case 'PUP':
+      return true
+    case 'Out':
+      return settings.reserve_allow_out === 1
+    case 'Doubtful':
+      return settings.reserve_allow_doubtful === 1
+    case 'Sus':
+      return settings.reserve_allow_sus === 1
+    case 'COV':
+      return settings.reserve_allow_cov === 1
+    case 'NA':
+      return settings.reserve_allow_na === 1
+    case 'DNR':
+      return settings.reserve_allow_dnr === 1
+    default:
+      return false
+  }
 }

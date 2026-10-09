@@ -103,21 +103,36 @@ export async function getPlayers(): Promise<Map<string, Player>> {
 
 const projCache = new Map<string, Promise<PlayerProjections>>()
 
+type RawProjections = Record<string, { stats: Record<string, number>; opponent: string | null; is_away_team?: boolean } | null>
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 export function getPlayerProjections(id: string, season: string): Promise<PlayerProjections> {
   const key = `${season}:${id}`
   let p = projCache.get(key)
   if (!p) {
-    p = get<Record<string, { stats: Record<string, number>; opponent: string | null; is_away_team?: boolean } | null>>(
-      `${PROJ_API}/player/${id}?season=${season}&season_type=regular&grouping=week`,
-    )
-      .then((raw) => {
-        const out: PlayerProjections = {}
-        for (const [wk, v] of Object.entries(raw ?? {})) {
-          out[Number(wk)] = v ? { stats: v.stats ?? {}, opponent: v.opponent ?? null, away: !!v.is_away_team } : null
+    const url = `${PROJ_API}/player/${id}?season=${season}&season_type=regular&grouping=week`
+    p = (async () => {
+      // Sleeper rate-limits bursts (a roster pair plus the waiver scan is ~80 calls), so
+      // retry with backoff. A failure must never be cached as "no projections": that
+      // would score a healthy player 0 for the whole session.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const raw = await get<RawProjections>(url)
+          const out: PlayerProjections = {}
+          for (const [wk, v] of Object.entries(raw ?? {})) {
+            out[Number(wk)] = v ? { stats: v.stats ?? {}, opponent: v.opponent ?? null, away: !!v.is_away_team } : null
+          }
+          return out
+        } catch (e) {
+          if (attempt >= 3) {
+            projCache.delete(key)
+            throw e
+          }
+          await sleep(400 * 2 ** attempt + Math.random() * 200)
         }
-        return out
-      })
-      .catch(() => ({}))
+      }
+    })()
     projCache.set(key, p)
   }
   return p
@@ -132,10 +147,14 @@ export async function getProjectionsFor(
   const queue = [...new Set(ids)]
   const worker = async () => {
     for (let id = queue.shift(); id; id = queue.shift()) {
-      out.set(id, await getPlayerProjections(id, season))
+      try {
+        out.set(id, await getPlayerProjections(id, season))
+      } catch {
+        // Left out of the result on purpose, so the next load asks for it again.
+      }
     }
   }
-  await Promise.all(Array.from({ length: 10 }, worker))
+  await Promise.all(Array.from({ length: 6 }, worker))
   return out
 }
 

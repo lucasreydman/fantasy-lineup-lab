@@ -70,3 +70,148 @@ body {
   background: var(--color-line);
   border-radius: 8px;
 }
+
+/* Native dropdown lists follow the page: without this, Windows/Chrome renders the
+   <option> list light while it inherits our light text. */
+:root {
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background: var(--color-panel-2);
+  color: var(--color-ink);
+}
+
+/* Rows are dragged by long-press on touch: no callout menu or text selection. */
+.drag-row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  pointer-events: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--color-teal);
+  color: var(--color-bg);
+  font: 600 13px var(--font-sans);
+  box-shadow: 0 10px 30px -6px rgb(0 0 0 / 0.6);
+  white-space: nowrap;
+}
+
+/* Installed app on a notched phone: keep content clear of the status bar and home indicator. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── drag affordance ─────────────────────────────────────────────────────── */
+.drag-row[draggable='true']:hover {
+  background: var(--color-panel-2);
+  box-shadow: inset 3px 0 0 var(--color-teal);
+}
+.drag-row[draggable='true']:hover .grip {
+  color: var(--color-teal);
+}
+.drag-row.is-source {
+  opacity: 0.35;
+}
+
+/* While anything is being dragged, every panel announces itself as a drop zone. */
+[data-drop-side] {
+  position: relative;
+}
+body.dragging [data-drop-side]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 2px dashed color-mix(in srgb, var(--color-teal) 55%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-teal) 5%, transparent);
+  pointer-events: none;
+}
+/* The label: a solid pill near the top of the panel. */
+body.dragging [data-drop-side]::before {
+  content: attr(data-drop-label);
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--color-panel-3);
+  color: var(--color-teal);
+  box-shadow: 0 6px 20px -4px rgb(0 0 0 / 0.6);
+  font: 600 12.5px var(--font-sans);
+  pointer-events: none;
+}
+body.dragging [data-drop-side].drop-over::after {
+  border-style: solid;
+  border-color: var(--color-teal);
+  background: color-mix(in srgb, var(--color-teal) 12%, transparent);
+}
+body.dragging [data-drop-side].drop-over::before {
+  background: var(--color-teal);
+  color: var(--color-bg);
+}
+body.dragging[data-drag-kind='add'] [data-drop-side]::before {
+  content: attr(data-add-label);
+}
+/* A rostered player can't be "moved" onto the team it's already on. */
+body.dragging[data-drag-kind='player'] [data-drop-side]:has(.is-source)::after,
+body.dragging[data-drag-kind='player'] [data-drop-side]:has(.is-source)::before {
+  display: none;
+}
+
+/* Phone drop dock: only while dragging, only when the rosters are stacked. */
+.drop-dock {
+  display: none;
+}
+body.dragging .drop-dock {
+  display: flex;
+  animation: dock-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (min-width: 1024px) {
+  body.dragging .drop-dock {
+    display: none;
+  }
+}
+@keyframes dock-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+.sheet-in {
+  animation: sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-in,
+  body.dragging .drop-dock {
+    animation: none;
+  }
+}

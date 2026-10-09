@@ -133,9 +133,9 @@ export function rankPickups(
     const have = counts.get(pos) ?? 0
     const cap = caps[pos]
     const starts = gain > 0.05
-    // Over the cap at QB/TE/K/DEF (a third QB, a third TE): only for a real upgrade or a
-    // bye/injury fill-in, never for a fraction of a point.
-    if (cap !== undefined && have >= cap && gain / ctx.weeks.length < 1.5) continue
+    // Hard cap at QB/TE/K/DEF: two QBs (one-QB league) means no third, however well
+    // he projects. Upgrading a position that's full is a swap, not a pickup.
+    if (cap !== undefined && have >= cap) continue
     const dem = demand(ctx.slots, pos)
     if (dem === 0) continue
     // Depth target: the position's share of the starting lineup, scaled up to the whole
@@ -145,8 +145,10 @@ export function rankPickups(
     if (!starts && need <= 0) continue
     const reason = starts
       ? startWeeks.length === ctx.weeks.length
-        ? `Starts every week · +${gain.toFixed(1)}`
-        : `Starts Wk ${startWeeks.join(', ')} · +${gain.toFixed(1)}`
+        ? `Starts every week · +${gain.toFixed(1)} pts`
+        : startWeeks.length <= 3
+          ? `Starts Wk ${startWeeks.join(', ')} · +${gain.toFixed(1)} pts`
+          : `Starts ${startWeeks.length} of ${ctx.weeks.length} wks · +${gain.toFixed(1)} pts`
       : `${pos} depth · you have ${have}`
     out.push({ id, gain: starts ? Math.round(gain * 100) / 100 : 0, startWeeks, total: Math.round(total * 10) / 10, reason, need })
   }

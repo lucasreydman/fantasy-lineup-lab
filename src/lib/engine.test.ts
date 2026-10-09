@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { optimizeLineup, rosterLimit } from './lineup'
 import { scoreStats } from './scoring'
-import { evaluateTeam, moveTags, type EvalContext } from './trade'
+import { emptyPlan, evaluateTeam, moveTags, type EvalContext, type TeamEnv, type TeamPlan } from './trade'
 import type { Team } from './types'
 
 const p = (id: string, pos: string, points: number) => ({ id, positions: [pos], points })
@@ -48,41 +48,81 @@ describe('scoring', () => {
 })
 
 describe('evaluateTeam', () => {
-  const pos: Record<string, string> = { qb: 'QB', rb1: 'RB', rb2: 'RB', rb3: 'RB', wr1: 'WR', wr2: 'WR', wrX: 'WR', star: 'WR' }
-  const pts: Record<string, number> = { qb: 20, rb1: 15, rb2: 12, rb3: 4, wr1: 14, wr2: 9, wrX: 2, star: 25 }
-  const ctx: EvalContext = {
-    slots: ['QB', 'RB', 'WR', 'FLEX'],
-    limit: 6,
-    weeks: [1, 2],
-    points: (id, week) => (week === 2 && id === 'star' ? 0 : pts[id] ?? 0), // star on bye wk2
-    positionsOf: (id) => [pos[id]],
+  const pos: Record<string, string> = {
+    qb: 'QB', rb1: 'RB', rb2: 'RB', rb3: 'RB', wr1: 'WR', wr2: 'WR', wrX: 'WR', star: 'WR', hurt: 'RB', late: 'WR', fa1: 'RB', fa2: 'WR',
   }
+  const pts: Record<string, number> = { qb: 20, rb1: 15, rb2: 12, rb3: 4, wr1: 14, wr2: 9, wrX: 2, star: 25, hurt: 0, fa1: 8, fa2: 3 }
+  const points = (id: string, week: number) => {
+    if (id === 'star' && week === 2) return 0 // bye
+    if (id === 'late') return week >= 3 ? 16 : 0 // back from injury in week 3
+    return pts[id] ?? 0
+  }
+  const view: EvalContext = { slots: ['QB', 'RB', 'WR', 'FLEX'], limit: 6, weeks: [1, 2], points, positionsOf: (id) => [pos[id]] }
   const team: Team = {
     rosterId: 1, name: 'T', ownerName: 'o', avatarUrl: null, ownerIds: [],
     active: ['qb', 'rb1', 'rb2', 'rb3', 'wr1', 'wr2'], reserve: [], taxi: [],
   }
+  const env = (over: Partial<TeamEnv> = {}): TeamEnv => ({
+    view,
+    decide: { ...view, weeks: [1, 2, 3, 4, 5] },
+    irSlots: 0,
+    irEligible: () => false,
+    pool: [],
+    posOf: (id) => pos[id],
+    ...over,
+  })
+  const plan = (p: Partial<TeamPlan>): TeamPlan => ({ ...emptyPlan(), ...p })
 
-  it('2-for-1: frees a roster spot, elevates a bench player', () => {
-    const ev = evaluateTeam(team, ['star'], ['rb1', 'wr1'], [], ctx)
-    expect(ev.dropsNeeded).toBe(0)
-    expect(ev.rosterAfter).toHaveLength(5)
+  it('2-for-1: elevates a bench player and fills the open spot with the best pickup', () => {
+    const ev = evaluateTeam(team, plan({ incoming: ['star'], outgoing: ['rb1', 'wr1'] }), env({ pool: ['fa1', 'fa2'] }))
+    expect(ev.drops).toEqual([])
+    expect(ev.autoAdds).toEqual(['fa1']) // fa1 starts over rb3; fa2 would never start
+    expect(ev.rosterAfter).toHaveLength(6)
     const wk1 = ev.weeks[0]
-    expect(wk1.after.slots.map((s) => s.playerId)).toEqual(['qb', 'rb2', 'star', 'wr2'])
     const tags = moveTags(wk1, ev.incoming)
     expect(tags.get('star')).toBe('acquired')
     expect(tags.get('wr2')).toBe('elevated')
   })
 
-  it('1-for-2: forces a drop and picks the least valuable bench player', () => {
-    const ev = evaluateTeam(team, ['star', 'wrX'], ['wr2'], [], ctx)
-    expect(ev.dropsNeeded).toBe(1)
-    // wrX was just acquired so it is protected; rb3 is the cheapest cut.
+  it('a declined pickup is skipped for the next best', () => {
+    const ev = evaluateTeam(team, plan({ incoming: ['star'], outgoing: ['rb1', 'wr1'], declined: ['fa1'] }), env({ pool: ['fa1', 'fa2'] }))
+    expect(ev.autoAdds).not.toContain('fa1')
+  })
+
+  it('1-for-2: cuts the least valuable player, never the one just acquired', () => {
+    const ev = evaluateTeam(team, plan({ incoming: ['star', 'wrX'], outgoing: ['wr2'] }), env())
     expect(ev.autoDrops).toEqual(['rb3'])
   })
 
-  it('respects manual drops', () => {
-    const ev = evaluateTeam(team, ['star', 'wrX'], ['wr2'], ['wrX'], ctx)
-    expect(ev.drops).toEqual(['wrX'])
-    expect(ev.autoDrops).toEqual([])
+  it('judges cuts on rest of season, not the weeks on screen', () => {
+    // 'late' scores 0 in the viewed weeks but 16 from week 3 on: rb3 goes, not him.
+    const roster: Team = { ...team, active: [...team.active.slice(0, 5), 'late'] }
+    const ev = evaluateTeam(roster, plan({ incoming: ['star'], outgoing: [] }), env())
+    expect(ev.autoDrops).toEqual(['rb3'])
+  })
+
+  it('stashes an IR-eligible player instead of cutting someone', () => {
+    const roster: Team = { ...team, active: [...team.active.slice(0, 5), 'hurt'] }
+    const ev = evaluateTeam(
+      roster,
+      plan({ incoming: ['star'], outgoing: [] }),
+      env({ irSlots: 1, irEligible: (id) => id === 'hurt' }),
+    )
+    expect(ev.autoIr).toEqual(['hurt'])
+    expect(ev.drops).toEqual([])
+    expect(ev.irAfter).toEqual(['hurt'])
+  })
+
+  it('respects manual drops and keeps', () => {
+    expect(evaluateTeam(team, plan({ incoming: ['star', 'wrX'], outgoing: ['wr2'], drops: ['wrX'] }), env()).autoDrops).toEqual([])
+    const kept = evaluateTeam(team, plan({ incoming: ['star', 'wrX'], outgoing: ['wr2'], keeps: ['rb3'] }), env())
+    expect(kept.autoDrops).not.toContain('rb3')
+  })
+})
+
+describe('bench order', () => {
+  it('reads QB, RB, WR, TE, K, then by projection', () => {
+    const lu = optimizeLineup(['FLEX'], [p('te', 'TE', 9), p('wr', 'WR', 8), p('k', 'K', 7), p('qb', 'QB', 3), p('rb2', 'RB', 4), p('rb1', 'RB', 6), p('star', 'WR', 30)])
+    expect(lu.bench).toEqual(['qb', 'rb1', 'rb2', 'wr', 'te', 'k'])
   })
 })

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildBlendCtx, type BlendCtx } from '../lib/blend'
-import { rosterLimit, starterSlots } from '../lib/lineup'
+import { irEligible, rosterLimit, starterSlots } from '../lib/lineup'
 import { loadBlendFeeds } from '../lib/market'
 import { makeScorer, type ProjectionMode } from '../lib/scoring'
 import { getProjectionsFor } from '../lib/sleeper'
-import { evaluateTeam, type EvalContext } from '../lib/trade'
+import { emptyPlan, evaluateTeam, type EvalContext, type TeamEnv, type TeamPlan } from '../lib/trade'
 import type { League, Player, PlayerProjections, Team } from '../lib/types'
-import { freeAgentShortlist, rankPickups } from '../lib/waivers'
+import { freeAgentShortlist } from '../lib/waivers'
 import { HorizonPicker, Impact, type Horizon } from './Impact'
-import { FA, IR, TeamPanel } from './TeamPanel'
+import { LabProjectionsIntro, shouldShowIntro } from './LabProjectionsIntro'
+import { DropDock } from './DropDock'
+import { FA, IR, TeamPanel, type MoveKey } from './TeamPanel'
 import { TradeBar } from './TradeBar'
 import { Spinner, TeamAvatar } from './ui'
 
@@ -30,14 +32,16 @@ interface Props {
   onStateChange: (s: LabState) => void
 }
 
-type PerTeam = Record<number, string[]>
+type Moves = Omit<TeamPlan, 'incoming' | 'outgoing'>
 
 const LAST_WEEK = 18
+/** Fantasy seasons end in Week 17; rest-of-season decisions look that far ahead. */
+const SEASON_END = 17
 const owns = (t: Team, id: string) => t.active.includes(id) || t.reserve.includes(id) || t.taxi.includes(id)
 const allPlayers = (t: Team) => [...t.active, ...t.reserve, ...t.taxi]
 const toggle = (list: string[], id: string, on: boolean) =>
   on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
-const setIn = (m: PerTeam, team: number, id: string, on: boolean): PerTeam => ({ ...m, [team]: toggle(m[team] ?? [], id, on) })
+const range = (a: number, b: number) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i)
 
 export function Lab({ league, teams, players, currentWeek, initial, onStateChange }: Props) {
   const [meId, setMeId] = useState(initial.me)
@@ -47,14 +51,13 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
   const [horizon, setHorizon] = useState(initial.horizon)
   const [mode, setMode] = useState<ProjectionMode>(initial.mode)
   const [viewWeek, setViewWeek] = useState(initial.horizon.start)
-  const [drops, setDrops] = useState<PerTeam>({})
-  const [keeps, setKeeps] = useState<PerTeam>({})
-  const [adds, setAdds] = useState<PerTeam>({})
-  const [activations, setActivations] = useState<PerTeam>({})
+  const [moves, setMoves] = useState<Record<number, Moves>>({})
   const [projections, setProjections] = useState<Map<string, PlayerProjections>>(new Map())
   const [loading, setLoading] = useState(true)
   const [blend, setBlend] = useState<{ ctx: BlendCtx | null; error: string | null }>({ ctx: null, error: null })
   const [freeAgents, setFreeAgents] = useState<string[] | null>(null)
+  // A shared link can open straight into Lineup Lab projections; explain them then too.
+  const [intro, setIntro] = useState(() => initial.mode === 'lab' && shouldShowIntro())
 
   const me = teams.find((t) => t.rosterId === meId) ?? teams[0]
   const partner = teams.find((t) => t.rosterId === partnerId) ?? teams.find((t) => t.rosterId !== me.rosterId)!
@@ -80,7 +83,7 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
   }, [me, partner, league.season])
 
   useEffect(() => {
-    if (mode !== 'blend' || blend.ctx) return
+    if (mode !== 'lab' || blend.ctx) return
     let live = true
     loadBlendFeeds().then(
       ([market, dvp]) => live && setBlend({ ctx: buildBlendCtx(market, dvp, players), error: null }),
@@ -95,46 +98,71 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     if (viewWeek < horizon.start || viewWeek > horizon.end) setViewWeek(horizon.start)
   }, [horizon, viewWeek])
 
+  const switchMode = (m: ProjectionMode) => {
+    setMode(m)
+    if (m === 'lab' && shouldShowIntro()) setIntro(true)
+  }
+
   const scorer = useMemo(
-    () => makeScorer(projections, league.scoring_settings, mode === 'blend' && blend.ctx ? { ctx: blend.ctx, players } : null),
+    () => makeScorer(projections, league.scoring_settings, mode === 'lab' && blend.ctx ? { ctx: blend.ctx, players } : null),
     [projections, league.scoring_settings, mode, blend.ctx, players],
   )
 
-  const ctx: EvalContext = useMemo(
+  const view: EvalContext = useMemo(
     () => ({
       slots: starterSlots(league.roster_positions),
       limit: rosterLimit(league.roster_positions),
-      weeks: Array.from({ length: horizon.end - horizon.start + 1 }, (_, i) => horizon.start + i),
+      weeks: range(horizon.start, horizon.end),
       points: scorer.points,
       positionsOf: (id) => players.get(id)?.positions ?? [],
     }),
     [league.roster_positions, horizon, scorer, players],
   )
+  // Automatic drops, IR moves and pickups are judged on the rest of the season,
+  // whatever window is on screen.
+  const decide: EvalContext = useMemo(
+    () => ({ ...view, weeks: range(currentWeek, Math.max(currentWeek, SEASON_END)) }),
+    [view, currentWeek],
+  )
 
-  const evalFor = (team: Team, incoming: string[], outgoing: string[]) =>
-    evaluateTeam(
-      team,
-      [...incoming, ...(adds[team.rosterId] ?? []), ...(activations[team.rosterId] ?? [])],
-      outgoing,
-      drops[team.rosterId] ?? [],
-      ctx,
-      keeps[team.rosterId] ?? [],
+  const irSlots = Number(league.settings.reserve_slots ?? 0)
+  const isIrEligible = useMemo(
+    () => (id: string) => irEligible(players.get(id)?.injury, league.settings),
+    [players, league.settings],
+  )
+  const movesOf = (rosterId: number): Moves => ({ ...emptyPlan(), ...moves[rosterId] })
+  const posOf = (id: string) => players.get(id)?.pos ?? '?'
+
+  const env = (pool: string[] | null): TeamEnv => ({ view, decide, irSlots, irEligible: isIrEligible, pool, posOf })
+
+  // You first, then your partner from whatever free agents you didn't take.
+  const meEval = useMemo(
+    () =>
+      evaluateTeam(
+        me,
+        { ...movesOf(me.rosterId), incoming: receive, outgoing: send },
+        env(freeAgents?.filter((id) => !movesOf(partner.rosterId).adds.includes(id)) ?? null),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [me, partner.rosterId, receive, send, moves, view, decide, freeAgents, isIrEligible],
+  )
+  const partnerEval = useMemo(() => {
+    const taken = new Set([...meEval.adds, ...meEval.autoAdds])
+    return evaluateTeam(
+      partner,
+      { ...movesOf(partner.rosterId), incoming: send, outgoing: receive },
+      env(freeAgents?.filter((id) => !taken.has(id)) ?? null),
     )
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const meEval = useMemo(() => evalFor(me, receive, send), [me, receive, send, drops, keeps, adds, activations, ctx])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const partnerEval = useMemo(() => evalFor(partner, send, receive), [partner, receive, send, drops, keeps, adds, activations, ctx])
-
-  const meOpen = meEval.limit - meEval.rosterAfter.length
-  const partnerOpen = partnerEval.limit - partnerEval.rosterAfter.length
-  const needWaivers = meOpen > 0 || partnerOpen > 0
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partner, receive, send, moves, view, decide, freeAgents, meEval, isIrEligible])
 
   // The waiver wire is only scanned once a roster actually has room.
+  const needWire = meEval.scanning || partnerEval.scanning
   useEffect(() => {
-    if (!needWaivers || freeAgents) return
+    if (!needWire || freeAgents) return
     let live = true
     const rostered = new Set(teams.flatMap(allPlayers))
-    freeAgentShortlist(league.season, horizon.start, rostered, players, ctx.slots, league.scoring_settings)
+    freeAgentShortlist(league.season, currentWeek, rostered, players, view.slots, league.scoring_settings, 8)
       .then(async (ids) => {
         await fetchProjections(ids)
         if (live) setFreeAgents(ids)
@@ -144,31 +172,24 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needWaivers, freeAgents, teams, league.season, players])
+  }, [needWire, freeAgents, teams, league.season, players])
 
-  const posOf = (id: string) => players.get(id)?.pos ?? '?'
-  const claimed = new Set(Object.values(adds).flat())
-  const pool = freeAgents?.filter((id) => !claimed.has(id)) ?? null
-  const meSuggest = useMemo(
-    () => (meOpen > 0 ? (pool ? rankPickups(meEval.rosterAfter, pool, ctx, posOf) : null) : undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [meOpen, pool?.join(), meEval, ctx],
-  )
-  const partnerSuggest = useMemo(
-    () => (partnerOpen > 0 ? (pool ? rankPickups(partnerEval.rosterAfter, pool, ctx, posOf) : null) : undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [partnerOpen, pool?.join(), partnerEval, ctx],
-  )
+  const horizonPoints = (id: string) => view.weeks.reduce((s, w) => s + scorer.points(id, w), 0)
 
-  const horizonPoints = (id: string) => ctx.weeks.reduce((s, w) => s + scorer.points(id, w), 0)
+  const setMove = (rosterId: number, key: MoveKey, id: string, on: boolean) =>
+    setMoves((m) => {
+      const cur = { ...emptyPlan(), ...m[rosterId] }
+      const next: Moves = { ...cur, [key]: toggle(cur[key], id, on) }
+      // Keeping or declining something overrides an earlier opposite choice.
+      if (key === 'keeps' && on) next.drops = toggle(next.drops, id, false)
+      if (key === 'drops' && on) next.keeps = toggle(next.keeps, id, false)
+      return { ...m, [rosterId]: next }
+    })
 
   const resetTrade = () => {
     setSend([])
     setReceive([])
-    setDrops({})
-    setKeeps({})
-    setAdds({})
-    setActivations({})
+    setMoves({})
   }
 
   /** Something was dropped on `side`'s panel: a rostered player, a waiver pickup, or an IR player. */
@@ -177,12 +198,14 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     const other = side === 'me' ? partner : me
     if (data.startsWith(FA)) {
       const id = data.slice(FA.length)
-      setAdds((a) => setIn(setIn(a, other.rosterId, id, false), target.rosterId, id, true))
+      setMove(other.rosterId, 'adds', id, false)
+      setMove(target.rosterId, 'adds', id, true)
+      setMove(target.rosterId, 'declined', id, false)
       return
     }
     const id = data.startsWith(IR) ? data.slice(IR.length) : data
     if (data.startsWith(IR) && owns(target, id)) {
-      setActivations((a) => setIn(a, target.rosterId, id, true))
+      setMove(target.rosterId, 'activations', id, true)
       return
     }
     if (owns(me, id)) setSend((s) => toggle(s, id, side === 'partner'))
@@ -192,37 +215,24 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     if (owns(me, id)) setSend((s) => toggle(s, id, !s.includes(id)))
     else if (owns(partner, id)) setReceive((r) => toggle(r, id, !r.includes(id)))
   }
-  const toggleDrop = (rosterId: number, id: string) => {
-    setDrops((d) => setIn(d, rosterId, id, !(d[rosterId] ?? []).includes(id)))
-    setKeeps((k) => setIn(k, rosterId, id, false))
-  }
-  const keep = (rosterId: number, id: string) => {
-    if ((drops[rosterId] ?? []).includes(id)) toggleDrop(rosterId, id)
-    else setKeeps((k) => setIn(k, rosterId, id, true))
-  }
 
   const hasTrade = send.length + receive.length > 0
-  const weekIdx = ctx.weeks.indexOf(viewWeek)
+  const weekIdx = view.weeks.indexOf(viewWeek)
 
   const panelFor = (team: Team, side: 'me' | 'partner') => ({
+    side,
     week: viewWeek,
     players,
     projections,
     points: scorer.points,
     detail: scorer.detail,
     horizonPoints,
-    showHorizon: ctx.weeks.length > 1,
-    manualDrops: drops[team.rosterId] ?? [],
-    adds: adds[team.rosterId] ?? [],
-    activations: activations[team.rosterId] ?? [],
+    showHorizon: view.weeks.length > 1,
+    irEligible: isIrEligible,
+    irRoom: Math.max(0, irSlots - (side === 'me' ? meEval : partnerEval).irAfter.length),
     onReceive: (data: string) => placeOn(side, data),
     onMoveAcross: moveAcross,
-    onToggleDrop: (id: string) => toggleDrop(team.rosterId, id),
-    onKeep: (id: string) => keep(team.rosterId, id),
-    onAdd: (id: string) => placeOn(side, FA + id),
-    onRemoveAdd: (id: string) => setAdds((a) => setIn(a, team.rosterId, id, false)),
-    onActivate: (id: string) => setActivations((a) => setIn(a, team.rosterId, id, true)),
-    onDeactivate: (id: string) => setActivations((a) => setIn(a, team.rosterId, id, false)),
+    onMove: (key: MoveKey, id: string, on: boolean) => setMove(team.rosterId, key, id, on),
   })
 
   return (
@@ -272,9 +282,8 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
           value={horizon}
           onChange={setHorizon}
         />
-        <ProjectionToggle mode={mode} onChange={setMode} />
+        <ProjectionToggle mode={mode} onChange={switchMode} onInfo={() => setIntro(true)} ctx={blend.ctx} error={blend.error} />
       </div>
-      {mode === 'blend' && <BlendStatus ctx={blend.ctx} error={blend.error} weeks={ctx.weeks} />}
 
       {loading && projections.size === 0 ? (
         <div className="flex justify-center rounded-2xl bg-panel py-16 ring-1 ring-line">
@@ -295,72 +304,71 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
               Lineups after trade · Week {viewWeek}
               {loading && <span className="ml-3 normal-case tracking-normal text-faint">updating…</span>}
             </h2>
-            {ctx.weeks.length > 1 && (
+            {view.weeks.length > 1 && (
               <div className="flex items-center gap-1">
-                <WeekArrow dir={-1} disabled={weekIdx <= 0} onClick={() => setViewWeek(ctx.weeks[weekIdx - 1])} />
-                <WeekArrow dir={1} disabled={weekIdx >= ctx.weeks.length - 1} onClick={() => setViewWeek(ctx.weeks[weekIdx + 1])} />
+                <WeekArrow dir={-1} disabled={weekIdx <= 0} onClick={() => setViewWeek(view.weeks[weekIdx - 1])} />
+                <WeekArrow dir={1} disabled={weekIdx >= view.weeks.length - 1} onClick={() => setViewWeek(view.weeks[weekIdx + 1])} />
               </div>
             )}
           </div>
 
           <div className="grid items-start gap-4 lg:grid-cols-2">
-            <TeamPanel {...panelFor(me, 'me')} label="You" team={me} ev={meEval} suggestions={meSuggest} />
-            <TeamPanel {...panelFor(partner, 'partner')} label="Trade partner" team={partner} ev={partnerEval} suggestions={partnerSuggest} />
+            <TeamPanel {...panelFor(me, 'me')} label="You" team={me} otherTeamName={partner.name} ev={meEval} />
+            <TeamPanel {...panelFor(partner, 'partner')} label="Trade partner" team={partner} otherTeamName={me.name} ev={partnerEval} />
           </div>
         </>
       )}
+
+      <DropDock me={me} partner={partner} />
+      {intro && <LabProjectionsIntro ctx={blend.ctx} onClose={() => setIntro(false)} />}
     </div>
   )
 }
 
-function ProjectionToggle({ mode, onChange }: { mode: ProjectionMode; onChange: (m: ProjectionMode) => void }) {
-  const opts: { m: ProjectionMode; label: string; hint: string }[] = [
-    { m: 'sleeper', label: 'Sleeper', hint: "Sleeper's own projections" },
-    { m: 'blend', label: 'Blend', hint: 'Vegas props + game lines + ESPN + matchup + health' },
+function ProjectionToggle({
+  mode, onChange, onInfo, ctx, error,
+}: {
+  mode: ProjectionMode
+  onChange: (m: ProjectionMode) => void
+  onInfo: () => void
+  ctx: BlendCtx | null
+  error: string | null
+}) {
+  const opts: { m: ProjectionMode; label: string }[] = [
+    { m: 'sleeper', label: 'Sleeper' },
+    { m: 'lab', label: 'Lineup Lab' },
   ]
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Projections</span>
       <div className="flex rounded-full bg-panel-2 p-1 ring-1 ring-line">
         {opts.map((o) => (
           <button
             key={o.m}
             type="button"
-            title={o.hint}
             onClick={() => onChange(o.m)}
             className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition ${
-              mode === o.m ? (o.m === 'blend' ? 'bg-wr text-bg' : 'bg-teal text-bg') : 'text-muted hover:text-ink'
+              mode === o.m ? (o.m === 'lab' ? 'bg-wr text-bg' : 'bg-teal text-bg') : 'text-muted hover:text-ink'
             }`}
           >
             {o.label}
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function BlendStatus({ ctx, error, weeks }: { ctx: BlendCtx | null; error: string | null; weeks: number[] }) {
-  if (error)
-    return (
-      <div className="rounded-xl bg-down/10 px-4 py-2.5 text-[12px] text-down ring-1 ring-down/30">
-        Couldn't load market data ({error}). Showing Sleeper projections.
-      </div>
-    )
-  if (!ctx)
-    return (
-      <div className="rounded-xl bg-panel px-4 py-2.5 ring-1 ring-line">
-        <Spinner label="Pulling sportsbook props, game lines and ESPN projections…" />
-      </div>
-    )
-  const later = weeks.some((w) => w !== ctx.week)
-  return (
-    <div className="rounded-xl bg-wr/8 px-4 py-2.5 text-[12px] leading-relaxed text-muted ring-1 ring-wr/25">
-      <span className="font-semibold text-wr">Blend · Week {ctx.week}:</span> {ctx.stats.propsMatched} player props
-      (Pinnacle + Underdog) · {ctx.stats.games} game lines · {ctx.stats.espnMatched} ESPN projections · defense vs.
-      position{ctx.dvp ? ` through Week ${ctx.dvp.throughWeek}` : ' unavailable'} · practice-report health.
-      {later && <> Books only price this week, so later weeks are Sleeper's projection adjusted for matchup.</>} Hover a
-      player's points for the breakdown.
+      <button
+        type="button"
+        onClick={onInfo}
+        aria-label="What are Lineup Lab projections?"
+        className="flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-semibold text-muted ring-1 ring-line hover:text-ink"
+      >
+        ?
+      </button>
+      {mode === 'lab' && !ctx && !error && <Spinner />}
+      {mode === 'lab' && error && (
+        <span className="text-[11px] text-down" title={error}>
+          Market data unavailable, using Sleeper
+        </span>
+      )}
     </div>
   )
 }
@@ -381,7 +389,7 @@ function TeamSelect({
         <path d="M2 4l4 4 4-4z" />
       </svg>
       <select
-        className="absolute inset-0 cursor-pointer opacity-0"
+        className="absolute inset-0 cursor-pointer bg-panel-2 text-ink opacity-0"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         aria-label={label}

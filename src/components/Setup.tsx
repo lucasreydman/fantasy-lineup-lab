@@ -6,11 +6,13 @@ import { Spinner, TeamAvatar } from './ui'
 interface Props {
   season: string
   onPick: (leagueId: string, userId: string | null) => void
+  /** Shown when not already running as the installed app */
+  onInstall?: () => void
 }
 
 const USER_KEY = 'sleeper:username'
 
-export function Setup({ season, onPick }: Props) {
+export function Setup({ season, onPick, onInstall }: Props) {
   const [username, setUsername] = useState(() => {
     try {
       return localStorage.getItem(USER_KEY) ?? ''
@@ -148,6 +150,21 @@ export function Setup({ season, onPick }: Props) {
           Try a demo league →
         </button>
       </div>
+
+      {onInstall && (
+        <button
+          type="button"
+          onClick={onInstall}
+          className="mt-3 flex w-full items-center gap-3 rounded-xl bg-panel px-4 py-3 text-left ring-1 ring-line transition hover:bg-panel-2 active:scale-[0.99]"
+        >
+          <img src="/icon.svg" alt="" width={36} height={36} className="rounded-[10px]" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-semibold">Add Lineup Lab to your home screen</div>
+            <div className="text-[12px] text-muted">Free, no app store. Opens full-screen like an app.</div>
+          </div>
+          <span className="text-muted">›</span>
+        </button>
+      )}
     </div>
   )
 }
