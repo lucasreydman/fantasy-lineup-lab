@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { BLEND_LABEL, type BlendPart, type BlendResult } from '../lib/blend'
 import type { Player, PlayerProjections } from '../lib/types'
 import { useDraggable } from '../lib/touchDrag'
-import { ActionSheet, inlineOnPhone, RowActionsInline, type RowAction } from './RowActions'
+import type { Flag } from '../lib/flags'
+import { PlayerSheet } from './PlayerSheet'
+import { RowActionsInline, type RowAction } from './RowActions'
 import { fmt, InjuryTag, PlayerAvatar, PosText, signed, SlotBadge, tierColor, TIER_HINT } from './ui'
 
 export type RowTag =
@@ -114,10 +116,15 @@ interface Props {
   blend?: BlendResult | null
   note?: ReactNode
   actions?: RowAction[]
+  /** Injury / status / news flags, shown as icons here and in full on the player card */
+  flags?: Flag[]
+  /** The week on screen (for the player card) */
+  week?: number
 }
 
 export function PlayerRow({
   id, player, slot, points, horizonPoints, opponent, tag, replaces, dragData, draggable = true, dimmed, blend, note, actions,
+  flags = [], week = 0,
 }: Props) {
   const pos = player?.pos ?? '?'
   const name = player ? `${player.first} ${player.last}`.trim() : `Player ${id}`
@@ -125,30 +132,60 @@ export function PlayerRow({
   const diff = blend ? blend.points - blend.sleeper : 0
   const drag = useDraggable(dragData ?? id, player ? shortName(player, id) : id, draggable)
   const [sheet, setSheet] = useState(false)
+  const closeSheet = useCallback(() => setSheet(false), [])
   const acts = actions ?? []
-  // On phones the whole row is the tap target for its actions (buttons inside keep their own taps).
+  // On phones the whole row opens the player card (buttons inside keep their own taps);
+  // on desktop the name and photo do.
   const onRowTap = (e: React.MouseEvent) => {
-    if (!acts.length || inlineOnPhone(acts) || !window.matchMedia('(max-width: 639px)').matches) return
+    if (!window.matchMedia('(max-width: 639px)').matches) return
     if ((e.target as HTMLElement).closest('button')) return
     setSheet(true)
   }
+  const openCard = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation()
+    setSheet(true)
+  }
+  const freshNews = flags.some((f) => f.label.startsWith('News in'))
+  // A serious problem the injury tag doesn't already say (released, a zero season...).
+  const hidden = !player?.injury && flags.some((f) => f.level === 'danger')
   return (
     <div
       {...drag}
       onClick={onRowTap}
       className={`group pop-in drag-row flex items-center gap-2 border-b border-line/60 py-2 pr-3 pl-1.5 transition-colors last:border-b-0 sm:gap-3 ${
         draggable ? 'cursor-grab active:cursor-grabbing' : ''
-      } ${dimmed ? 'opacity-45' : ''} ${acts.length && !inlineOnPhone(acts) ? 'max-sm:active:bg-panel-2' : ''}`}
+      } ${dimmed ? 'opacity-45' : ''} max-sm:active:bg-panel-2`}
     >
       <Grip visible={draggable} />
       <SlotBadge slot={slot} />
-      <PlayerAvatar id={id} pos={pos} />
+      <span className="sm:cursor-pointer" onClick={openCard} aria-hidden>
+        <PlayerAvatar id={id} pos={pos} />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className={`truncate text-[14px] font-medium ${tag === 'traded' ? 'line-through decoration-muted' : ''}`}>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={openCard}
+            onKeyDown={(e) => e.key === 'Enter' && openCard(e)}
+            title="Player news and details"
+            className={`truncate text-[14px] font-medium decoration-faint underline-offset-2 sm:cursor-pointer sm:hover:underline ${tag === 'traded' ? 'line-through decoration-muted' : ''}`}
+          >
             {name}
           </span>
           <InjuryTag status={player?.injury ?? null} />
+          {hidden && (
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-down/20 text-[10px] font-bold text-down" title={flags[0].label}>
+              !
+            </span>
+          )}
+          {freshNews && (
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0 text-muted" aria-label="Recent news">
+              <title>News in the last 3 days</title>
+              <rect x="1.5" y="2.5" width="11" height="11" rx="1.5" />
+              <path d="M12.5 5.5h2v6.5a1.5 1.5 0 0 1-3 0M4 5.5h6M4 8h6M4 10.5h4" strokeLinecap="round" />
+            </svg>
+          )}
           {tag && (
             <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold tracking-wider ${TAG[tag].className}`}>
               {TAG[tag].label}
@@ -186,15 +223,16 @@ export function PlayerRow({
         )}
       </PointsCell>
       {sheet && (
-        <ActionSheet
-          title={name}
-          subtitle={
-            <>
-              {pos} · {player?.team ?? 'FA'} · {opponent} · {fmt(points)} pts
-            </>
-          }
+        <PlayerSheet
+          id={id}
+          player={player}
+          flags={flags}
+          week={week}
+          opponent={opponent}
+          points={points}
+          blend={blend ?? null}
           actions={acts}
-          onClose={() => setSheet(false)}
+          onClose={closeSheet}
         />
       )}
     </div>

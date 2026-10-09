@@ -1,5 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import type { ReactNode } from 'react'
 
 export interface RowAction {
   key: string
@@ -76,63 +75,5 @@ function TextButton({ action: a }: { action: RowAction }) {
     >
       {a.label}
     </button>
-  )
-}
-
-/** Bottom sheet with a player's actions, sized for thumbs. */
-export function ActionSheet({
-  title, subtitle, actions, onClose,
-}: { title: string; subtitle?: ReactNode; actions: RowAction[]; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  // Portaled out of the row's DOM, and React events stopped here too: React bubbles
-  // through portals, so a tap or hold would otherwise reach the row (reopen / start a drag).
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end bg-black/55 backdrop-blur-[2px]"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClose()
-      }}
-      onTouchStart={(e) => e.stopPropagation()}
-      onDragStart={(e) => e.stopPropagation()}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div onClick={(e) => e.stopPropagation()} className="sheet-in safe-bottom w-full rounded-t-3xl bg-panel px-4 pt-3 pb-4 ring-1 ring-line">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
-        <div className="px-1 pb-3">
-          <div className="text-[16px] font-semibold">{title}</div>
-          {subtitle && <div className="text-[12.5px] text-muted">{subtitle}</div>}
-        </div>
-        <div className="space-y-2">
-          {actions.map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              onClick={() => {
-                a.onClick()
-                onClose()
-              }}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-[15px] font-semibold transition active:scale-[0.98] ${TONE[a.tone ?? 'muted'].sheet}`}
-            >
-              {a.icon && <span className="flex w-5 justify-center text-[12px]">{a.icon}</span>}
-              {a.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-2xl px-4 py-3.5 text-[15px] font-semibold text-muted transition active:scale-[0.98]"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
   )
 }

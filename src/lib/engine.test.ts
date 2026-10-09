@@ -138,3 +138,14 @@ describe('playoffWeeks', () => {
     expect(playoffWeeks({})).toEqual({ start: 15, end: 17 })
   })
 })
+
+describe('evaluateTeam robustness', () => {
+  it('a player already on the roster arriving again is counted once', () => {
+    const view: EvalContext = { slots: ['RB'], limit: 3, weeks: [1], points: () => 5, positionsOf: () => ['RB'] }
+    const team: Team = { rosterId: 1, name: 'T', ownerName: 'o', avatarUrl: null, ownerIds: [], active: ['a', 'b'], reserve: [], taxi: [] }
+    const ev = evaluateTeam(team, { ...emptyPlan(), incoming: ['a'] }, {
+      view, decide: view, irSlots: 0, irEligible: () => false, pool: [], posOf: () => 'RB',
+    })
+    expect(ev.rosterAfter.filter((x) => x === 'a')).toHaveLength(1)
+  })
+})

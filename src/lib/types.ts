@@ -14,6 +14,23 @@ export interface Player {
   espnId: number | null
   /** Sleeper search rank: lower = more relevant; used to break name ties */
   rank: number | null
+  /** Injury detail: body part ("Hamstring"), notes ("Sprain"), when it started (YYYY-MM-DD) */
+  bodyPart: string | null
+  injuryNotes: string | null
+  injuryStart: string | null
+  /** Practice report detail, when Sleeper has one */
+  practiceNote: string | null
+  /** When Sleeper last got news for this player (ms) */
+  newsUpdated: number | null
+}
+
+export interface NewsItem {
+  title: string
+  description: string | null
+  analysis: string | null
+  url: string | null
+  source: string
+  published: number
 }
 
 export interface League {

@@ -26,6 +26,12 @@ Deploys to Vercel as-is (pushes to `main` deploy automatically): `api/*.ts` are 
   Every automatic move is tagged and reversible (Keep, Remove pickup, Keep on IR), and you can make your own (Drop, Move to IR, Add, Activate).
 - **Pickups** (`src/lib/waivers.ts`): ranked by what each adds to the optimal lineups. Positionally aware by construction, plus hard caps (no third QB in a one-QB league, no third TE, no second K/DEF) and depth targets that favor the thinnest position.
 
+## Player news and trade alerts
+
+- **Player card**: tap a player (or click a name on desktop) for injury and practice detail, this week's projection breakdown, the latest news from Sleeper's feed (Rotowire, FantasyPros, RotoBaller, with analysis), and that player's actions.
+- **Flags** (`src/lib/flags.ts`): injury designation with body part and notes, practice report, roster status, not on an NFL team, upcoming bye, a zero rest-of-season projection, news in the last 3 days.
+- **Heads up before you trade**: every player coming to your roster (trade, pickup, IR activation) with a flag is listed under the trade bar with his latest headline. Sleeper's injury tag can lag the news by a day, so when the newest headline says a tagged player is good to go (or ruled out) the alert says so.
+
 ## Projections: Sleeper or Lineup Lab
 
 The toggle switches between Sleeper's projections and Lineup Lab's own (`src/lib/blend.ts`):

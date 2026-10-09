@@ -1,5 +1,6 @@
 import type {
   League,
+  NewsItem,
   LeagueUser,
   NflState,
   Player,
@@ -63,11 +64,13 @@ type PlayerRow = [
   id: string, first: string, last: string, pos: string, positions: string,
   team: string | null, injury: string | null, status: string | null, practice: string | null,
   espnId: number | null, rank: number | null,
+  bodyPart: string | null, injuryNotes: string | null, injuryStart: string | null,
+  practiceNote: string | null, newsUpdated: number | null,
 ]
 
 /** The full player DB is ~15MB; keep a trimmed copy for a day, as Sleeper asks. */
 export async function getPlayers(): Promise<Map<string, Player>> {
-  const key = 'sleeper:players:v2'
+  const key = 'sleeper:players:v3'
   let rows = cacheRead<PlayerRow[]>(key, 24 * 3600 * 1000)
   if (!rows) {
     const all = await get<Record<string, Record<string, unknown>>>(`${API}/players/nfl`)
@@ -89,15 +92,25 @@ export async function getPlayers(): Promise<Map<string, Player>> {
         (p.practice_participation as string | null) ?? null,
         (p.espn_id as number | null) ?? null,
         (p.search_rank as number | null) ?? null,
+        (p.injury_body_part as string | null) ?? null,
+        (p.injury_notes as string | null) ?? null,
+        (p.injury_start_date as string | null) ?? null,
+        (p.practice_description as string | null) ?? null,
+        (p.news_updated as number | null) ?? null,
       ])
     }
     cacheWrite(key, rows)
   }
   return new Map(
-    rows.map(([id, first, last, pos, positions, team, injury, status, practice, espnId, rank]) => [
-      id,
-      { id, first, last, pos, positions: positions.split(','), team, injury, status, practice, espnId: espnId ? Number(espnId) : null, rank },
-    ]),
+    rows.map(
+      ([id, first, last, pos, positions, team, injury, status, practice, espnId, rank, bodyPart, injuryNotes, injuryStart, practiceNote, newsUpdated]) => [
+        id,
+        {
+          id, first, last, pos, positions: positions.split(','), team, injury, status, practice,
+          espnId: espnId ? Number(espnId) : null, rank, bodyPart, injuryNotes, injuryStart, practiceNote, newsUpdated,
+        },
+      ],
+    ),
   )
 }
 
@@ -194,4 +207,41 @@ export function scoringLabel(scoring: Record<string, number>): string {
   const base = rec >= 1 ? 'PPR' : rec >= 0.5 ? 'Half PPR' : rec > 0 ? `${rec} PPR` : 'Standard'
   const tep = scoring.bonus_rec_te ? ` · TEP ${scoring.bonus_rec_te}` : ''
   return base + tep
+}
+
+const SOURCES: Record<string, string> = { fantasy_pros: 'FantasyPros', rotowire: 'Rotowire', rotoballer: 'RotoBaller' }
+/** "fantasy_pros" -> "FantasyPros"; unknown feeds get title-cased ("some_feed" -> "Some Feed"). */
+const sourceName = (s: string | undefined) =>
+  !s ? 'News' : (SOURCES[s] ?? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
+
+const newsCache = new Map<string, { at: number; items: Promise<NewsItem[]> }>()
+
+/**
+ * Latest news blurbs for a player (Rotowire, FantasyPros) from Sleeper's own feed,
+ * newest first. Cached ten minutes; a failure isn't cached.
+ */
+export function getPlayerNews(id: string): Promise<NewsItem[]> {
+  const hit = newsCache.get(id)
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.items
+  type Raw = { metadata?: { title?: string; description?: string; analysis?: string; url?: string }; source?: string; published?: number }
+  const items = get<Raw[] | null>(`https://api.sleeper.app/players/nfl/${id}/news`)
+    .then((raw) =>
+      (raw ?? [])
+        .filter((n) => n.metadata?.title)
+        .map((n) => ({
+          title: n.metadata!.title!.trim(),
+          description: n.metadata?.description?.trim() || null,
+          analysis: n.metadata?.analysis?.trim() || null,
+          url: n.metadata?.url || null,
+          source: sourceName(n.source),
+          published: n.published ?? 0,
+        }))
+        .sort((a, b) => b.published - a.published),
+    )
+    .catch((e) => {
+      newsCache.delete(id)
+      throw e
+    })
+  newsCache.set(id, { at: Date.now(), items })
+  return items
 }

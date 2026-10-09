@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Flag } from '../lib/flags'
 import type { Player } from '../lib/types'
-import { PlayerAvatar, PosText } from './ui'
+import { InjuryTag, PlayerAvatar, PosText } from './ui'
 
 interface SideProps {
   title: string
@@ -10,11 +11,15 @@ interface SideProps {
   players: Map<string, Player>
   onAdd: (id: string) => void
   onRemove: (id: string) => void
+  flagsFor: (id: string) => Flag[]
+  onOpen: (id: string) => void
 }
+
+const DOT: Record<string, string> = { danger: 'bg-down', warn: 'bg-warn' }
 
 const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
 
-function TradeSide({ title, subtitle, selected, pool, players, onAdd, onRemove }: SideProps) {
+function TradeSide({ title, subtitle, selected, pool, players, onAdd, onRemove, flagsFor, onOpen }: SideProps) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -50,11 +55,24 @@ function TradeSide({ title, subtitle, selected, pool, players, onAdd, onRemove }
       <div className="flex flex-wrap items-center gap-2">
         {selected.map((id) => {
           const p = players.get(id)
+          const worst = flagsFor(id)[0]
           return (
             <span key={id} className="pop-in flex items-center gap-2 rounded-full bg-panel-3 py-1 pr-1 pl-1 text-[13px]">
-              <PlayerAvatar id={id} pos={p?.pos ?? ''} size={24} />
-              <span className="font-medium">{p ? `${p.first.slice(0, 1)}. ${p.last}` : id}</span>
-              <PosText pos={p?.pos ?? ''} />
+              <button
+                type="button"
+                onClick={() => onOpen(id)}
+                title={worst ? `${worst.label}: tap for news` : 'News and details'}
+                className="flex items-center gap-2 rounded-full text-left hover:underline decoration-faint underline-offset-2"
+              >
+                <span className="relative">
+                  <PlayerAvatar id={id} pos={p?.pos ?? ''} size={24} />
+                  {worst && DOT[worst.level] && (
+                    <span className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-panel-3 ${DOT[worst.level]}`} />
+                  )}
+                </span>
+                <span className="font-medium">{p ? `${p.first.slice(0, 1)}. ${p.last}` : id}</span>
+                <PosText pos={p?.pos ?? ''} />
+              </button>
               <button
                 type="button"
                 onClick={() => onRemove(id)}
@@ -99,6 +117,7 @@ function TradeSide({ title, subtitle, selected, pool, players, onAdd, onRemove }
                     <span className="flex-1 truncate">{p ? `${p.first} ${p.last}` : id}</span>
                     <span className="text-[11px]">
                       <PosText pos={p?.pos ?? ''} /> <span className="text-muted">{p?.team ?? 'FA'}</span>
+                      <InjuryTag status={p?.injury ?? null} />
                     </span>
                   </button>
                 ))}
@@ -124,6 +143,8 @@ interface Props {
   /** Anything to undo: a trade, or any drop / IR / pickup / keep on either team. */
   dirty: boolean
   onReset: () => void
+  flagsFor: (id: string) => Flag[]
+  onOpen: (id: string) => void
 }
 
 export function TradeBar(props: Props) {
@@ -140,6 +161,8 @@ export function TradeBar(props: Props) {
           players={props.players}
           onAdd={(id) => props.onSend(id, true)}
           onRemove={(id) => props.onSend(id, false)}
+          flagsFor={props.flagsFor}
+          onOpen={props.onOpen}
         />
         <div className="hidden h-14 w-px bg-line md:block" />
         <TradeSide
@@ -150,6 +173,8 @@ export function TradeBar(props: Props) {
           players={props.players}
           onAdd={(id) => props.onReceive(id, true)}
           onRemove={(id) => props.onReceive(id, false)}
+          flagsFor={props.flagsFor}
+          onOpen={props.onOpen}
         />
       </div>
       {empty && (

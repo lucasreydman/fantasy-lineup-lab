@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import type { BlendResult } from '../lib/blend'
+import type { Flag } from '../lib/flags'
 import { moveTags, type TeamEval } from '../lib/trade'
 import type { Player, PlayerProjections, Team } from '../lib/types'
 import { useDropTarget } from '../lib/touchDrag'
@@ -28,6 +29,7 @@ interface Props {
   showHorizon: boolean
   irEligible: (id: string) => boolean
   irRoom: number
+  flagsFor: (id: string) => Flag[]
   onReceive: (data: string) => void
   onMoveAcross: (id: string) => void
   onMove: (key: MoveKey, id: string, on: boolean) => void
@@ -118,6 +120,8 @@ export function TeamPanel(props: Props) {
       horizonPoints={showHorizon ? horizonPoints(id) : undefined}
       opponent={opponentLabel(projections.get(id), week)}
       blend={detail(id, week)}
+      flags={props.flagsFor(id)}
+      week={week}
       tag={tag}
       draggable={!ev.adds.includes(id) && !ev.autoAdds.includes(id)}
       actions={actionsFor(id, false)}

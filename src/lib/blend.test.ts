@@ -6,7 +6,8 @@ import type { Player } from './types'
 import { rankPickups } from './waivers'
 
 const player = (id: string, first: string, last: string, pos: string, team: string, extra: Partial<Player> = {}): Player => ({
-  id, first, last, pos, positions: [pos], team, injury: null, status: 'Active', practice: null, espnId: null, rank: 1, ...extra,
+  id, first, last, pos, positions: [pos], team, injury: null, status: 'Active', practice: null, espnId: null, rank: 1,
+  bodyPart: null, injuryNotes: null, injuryStart: null, practiceNote: null, newsUpdated: null, ...extra,
 })
 
 const PPR = { rec: 1, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6, pass_yd: 0.04, pass_td: 4 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildBlendCtx, type BlendCtx } from '../lib/blend'
 import { irEligible, rosterLimit, starterSlots } from '../lib/lineup'
 import { loadBlendFeeds } from '../lib/market'
@@ -10,7 +10,11 @@ import type { League, Player, PlayerProjections, Team } from '../lib/types'
 import { freeAgentShortlist } from '../lib/waivers'
 import { HorizonPicker, Impact, type Horizon } from './Impact'
 import { LabProjectionsIntro, shouldShowIntro } from './LabProjectionsIntro'
+import { playerFlags, type Flag } from '../lib/flags'
 import { DropDock } from './DropDock'
+import { opponentLabel } from './PlayerRow'
+import { PlayerSheet } from './PlayerSheet'
+import { TradeAlerts } from './TradeAlerts'
 import { FA, IR, TeamPanel, type MoveKey } from './TeamPanel'
 import { TradeBar } from './TradeBar'
 import { Spinner, TeamAvatar } from './ui'
@@ -60,6 +64,14 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
 
   const me = teams.find((t) => t.rosterId === meId) ?? teams[0]
   const partner = teams.find((t) => t.rosterId === partnerId) ?? teams.find((t) => t.rosterId !== me.rosterId)!
+
+  // Trade pieces must belong to the side sending them. A shared link can be stale (the
+  // player has since been traded or dropped), and a piece the sender doesn't own would
+  // otherwise land on a roster twice.
+  useEffect(() => {
+    setSend((s) => (s.every((id) => owns(me, id)) ? s : s.filter((id) => owns(me, id))))
+    setReceive((r) => (r.every((id) => owns(partner, id)) ? r : r.filter((id) => owns(partner, id))))
+  }, [me, partner])
 
   useEffect(() => {
     onStateChange({ me: me.rosterId, partner: partner.rosterId, send, receive, horizon, mode })
@@ -191,6 +203,26 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
 
   const horizonPoints = (id: string) => view.weeks.reduce((s, w) => s + scorer.points(id, w), 0)
 
+  // Injury / status / news flags, judged on the rest of the season like the roster moves.
+  const flagsFor = useMemo(() => {
+    const cache = new Map<string, Flag[]>()
+    return (id: string) => {
+      let f = cache.get(id)
+      if (!f) {
+        f = playerFlags(players.get(id), { currentWeek, rosWeeks: decide.weeks, points: scorer.points, proj: projections.get(id) })
+        cache.set(id, f)
+      }
+      return f
+    }
+  }, [players, currentWeek, decide.weeks, scorer, projections])
+  const [card, setCard] = useState<string | null>(null)
+  const closeCard = useCallback(() => setCard(null), [])
+  const incoming = [
+    ...receive.map((id) => ({ id, via: 'trade' as const })),
+    ...[...meEval.adds, ...meEval.autoAdds].map((id) => ({ id, via: 'pickup' as const })),
+    ...[...meEval.activations, ...meEval.autoActivations].map((id) => ({ id, via: 'ir' as const })),
+  ]
+
   const setMove = (rosterId: number, key: MoveKey, id: string, on: boolean) =>
     setMoves((m) => {
       const cur = { ...emptyPlan(), ...m[rosterId] }
@@ -263,6 +295,7 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     showHorizon: view.weeks.length > 1,
     irEligible: isIrEligible,
     irRoom: Math.max(0, irSlots - (side === 'me' ? meEval : partnerEval).irAfter.length),
+    flagsFor,
     onReceive: (data: string) => placeOn(side, data),
     onMoveAcross: moveAcross,
     onMove: (key: MoveKey, id: string, on: boolean) => setMove(team.rosterId, key, id, on),
@@ -306,7 +339,11 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
         onReceive={(id, add) => setReceive((r) => toggle(r, id, add))}
         dirty={dirty}
         onReset={resetAll}
+        flagsFor={flagsFor}
+        onOpen={setCard}
       />
+
+      <TradeAlerts incoming={incoming} players={players} flagsFor={flagsFor} onOpen={setCard} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <HorizonPicker
@@ -361,6 +398,18 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
       )}
 
       <DropDock me={me} partner={partner} />
+      {card && (
+        <PlayerSheet
+          id={card}
+          player={players.get(card)}
+          flags={flagsFor(card)}
+          week={viewWeek}
+          opponent={opponentLabel(projections.get(card), viewWeek)}
+          points={scorer.points(card, viewWeek)}
+          blend={scorer.detail(card, viewWeek)}
+          onClose={closeCard}
+        />
+      )}
       {undo && (
         <div className="safe-bottom pop-in fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="status">
           <div className="flex items-center gap-3 rounded-full bg-panel-3 py-2 pr-2 pl-4 text-[13px] shadow-2xl ring-1 ring-line">

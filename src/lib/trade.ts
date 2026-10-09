@@ -138,7 +138,8 @@ export function evaluateTeam(team: Team, plan: TeamPlan, env: TeamEnv): TeamEval
   const { view, decide } = env
   const out = new Set(plan.outgoing)
   const reserve = team.reserve.filter((id) => !out.has(id) && !plan.activations.includes(id))
-  const traded = [...team.active.filter((id) => !out.has(id)), ...plan.incoming, ...plan.adds, ...plan.activations]
+  // Deduped: a player can only be on the roster once, whatever the plan says.
+  const traded = [...new Set([...team.active.filter((id) => !out.has(id)), ...plan.incoming, ...plan.adds, ...plan.activations])]
 
   const irRoom = Math.max(0, env.irSlots - reserve.length)
   const stashed = plan.toIr.filter((id) => traded.includes(id)).slice(0, irRoom)
