@@ -30,8 +30,8 @@ Deploys to Vercel as-is (pushes to `main` deploy automatically): `api/*.ts` are 
 
 The toggle switches between Sleeper's projections and Lineup Lab's own (`src/lib/blend.ts`):
 
-1. **Consensus**: Sleeper × ESPN stat lines, 50/50 where both project a stat.
-2. **Sportsbooks**: Pinnacle + Underdog player props (median line, de-vigged juice → expected value; anytime-TD → expected TDs via Poisson) anchor the stats they price, at 70–85% weight.
+1. **Sportsbooks lead**: Pinnacle + Underdog player props (median line, de-vigged juice → expected value; anytime-TD → expected TDs via Poisson) set the stats they price, at 70–85% weight.
+2. **Sleeper + ESPN fill the gaps**: books price only some stats for some players (about 210 players this week, few kickers, no defenses), and only the current week. Every other stat comes from Sleeper's and ESPN's projections averaged 50/50.
 3. **Game script**: implied team totals and spreads tilt everything the books didn't price.
 4. **Matchup**: defense vs. position from Sleeper actuals, scored with the league's settings, regressed by measured year-over-year predictiveness, capped at ±10%.
 5. **Health**: Out/IR zeroed, Doubtful 0.2×, Questionable by practice report (DNP 0.6×, limited 0.85×).

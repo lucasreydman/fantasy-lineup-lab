@@ -24,16 +24,16 @@ function remember(forever: boolean) {
 
 const STEPS: { title: string; body: ReactNode }[] = [
   {
-    title: 'Two projections, averaged',
-    body: "Sleeper's stat line blended 50/50 with ESPN's, stat by stat, so one site's blind spot doesn't decide your lineup.",
+    title: 'Sportsbooks lead',
+    body: 'Player props from Pinnacle (the sharpest book) and Underdog: passing, rushing and receiving yards, receptions, attempts, anytime TD. Real money moves these lines, so wherever a book has a price, it carries 70–85% of the weight on that stat.',
   },
   {
-    title: 'Vegas leads where it has a price',
-    body: 'Player props from Pinnacle (the sharpest book) and Underdog: passing, rushing and receiving yards, receptions, anytime TD. Bettors put money on these lines, so they get 70–85% of the weight on those stats.',
+    title: 'Sleeper + ESPN fill the gaps',
+    body: 'Books only price some stats for some players, and only this week. Everything else (bench and waiver players, kickers, defenses, fumbles, bonuses, future weeks) comes from Sleeper’s and ESPN’s projections averaged, so neither site alone decides it.',
   },
   {
-    title: 'Game script for the rest',
-    body: "Each team's implied point total and the spread. A team expected to score 30 gets more touchdowns than one expected to score 17; big favorites run more, big underdogs throw more.",
+    title: 'Game script',
+    body: "Each team's implied point total and the spread, applied to the stats the books didn't price. A team expected to score 30 gets more touchdowns than one expected to score 17; big favorites run more, big underdogs throw more.",
   },
   {
     title: 'Matchup',
@@ -78,8 +78,8 @@ export function LabProjectionsIntro({ ctx, onClose }: { ctx: BlendCtx | null; on
             What are Lineup Lab projections?
           </h2>
           <p className="mt-2 text-[14px] leading-relaxed text-muted">
-            Sleeper's projection, sharpened with what the betting market knows. Every number is still scored with your
-            league's exact settings.
+            What the betting market expects, with projections filling in what it doesn't price. Every number is scored
+            with your league's exact settings.
           </p>
         </div>
         <ol className="space-y-3 px-6 py-3">
