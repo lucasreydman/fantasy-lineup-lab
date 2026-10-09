@@ -215,3 +215,14 @@ body.dragging .drop-dock {
     animation: none;
   }
 }
+
+/* No one-word orphan lines: balanced headings, "pretty" body text. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p,
+li {
+  text-wrap: pretty;
+}

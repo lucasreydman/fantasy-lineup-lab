@@ -4,7 +4,8 @@ let market: Promise<MarketSnapshot> | null = null
 let dvp: Promise<DvpSnapshot | null> | null = null
 
 async function getJson<T>(url: string): Promise<T> {
-  const r = await fetch(url, { headers: { accept: 'application/json' } })
+  // A hung request should fail (and be retried), not spin forever.
+  const r = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) })
   const ct = r.headers.get('content-type') ?? ''
   if (!r.ok || !ct.includes('json')) throw new Error(`${url} unavailable (${r.status})`)
   return r.json() as Promise<T>

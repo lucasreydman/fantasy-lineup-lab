@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { LogoMark } from './LogoMark'
 import { getLeagues, getUser, leagueAvatar, scoringLabel } from '../lib/sleeper'
 import type { League } from '../lib/types'
 import { Spinner, TeamAvatar } from './ui'
@@ -157,7 +158,7 @@ export function Setup({ season, onPick, onInstall }: Props) {
           onClick={onInstall}
           className="mt-3 flex w-full items-center gap-3 rounded-xl bg-panel px-4 py-3 text-left ring-1 ring-line transition hover:bg-panel-2 active:scale-[0.99]"
         >
-          <img src="/icon.svg" alt="" width={36} height={36} className="rounded-[10px]" />
+          <LogoMark size={36} />
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold">Add Lineup Lab to your home screen</div>
             <div className="text-[12px] text-muted">Free, no app store. Opens full-screen like an app.</div>

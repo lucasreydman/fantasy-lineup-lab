@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { LogoMark } from './components/LogoMark'
 import { InstallButton, InstallSheet, useInstall } from './components/InstallApp'
 import { Lab, type LabState } from './components/Lab'
 import { Setup } from './components/Setup'
@@ -205,5 +206,5 @@ function safeGet(key: string) {
 }
 
 function Logo() {
-  return <img src="/icon.svg" alt="" width={28} height={28} className="rounded-[8px]" />
+  return <LogoMark size={28} />
 }

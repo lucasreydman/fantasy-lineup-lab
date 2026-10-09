@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { LogoMark } from './LogoMark'
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -151,12 +152,12 @@ export function InstallSheet({ onClose }: { onClose: () => void }) {
         className="pop-in safe-bottom max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-panel ring-1 ring-line sm:rounded-3xl"
       >
         <div className="flex items-center gap-4 px-6 pt-6">
-          <img src="/icon.svg" alt="" width={56} height={56} className="rounded-[14px]" />
+          <LogoMark size={56} />
           <div>
             <h2 id="install-title" className="text-[20px] font-bold tracking-tight">
-              Put Lineup Lab on your phone
+              Install Lineup Lab
             </h2>
-            <p className="text-[13px] text-muted">Free, no app store. Opens full-screen, works like an app.</p>
+            <p className="text-[13px] text-muted">Free, no app store. Opens full-screen like any app.</p>
           </div>
         </div>
 

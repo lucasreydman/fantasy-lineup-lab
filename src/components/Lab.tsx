@@ -57,6 +57,7 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
   const [blend, setBlend] = useState<{ ctx: BlendCtx | null; error: string | null }>({ ctx: null, error: null })
   const [freeAgents, setFreeAgents] = useState<string[] | null>(null)
   // A shared link can open straight into Lineup Lab projections; explain them then too.
+  const [blendAttempt, setBlendAttempt] = useState(0)
   const [intro, setIntro] = useState(() => initial.mode === 'lab' && shouldShowIntro())
 
   const me = teams.find((t) => t.rosterId === meId) ?? teams[0]
@@ -82,17 +83,31 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me, partner, league.season])
 
+  // Market feeds: one quiet retry on failure, then a visible error with a Retry button.
   useEffect(() => {
-    if (mode !== 'lab' || blend.ctx) return
+    if (mode !== 'lab' || blend.ctx || blend.error) return
     let live = true
-    loadBlendFeeds().then(
-      ([market, dvp]) => live && setBlend({ ctx: buildBlendCtx(market, dvp, players), error: null }),
-      (e: Error) => live && setBlend({ ctx: null, error: e.message }),
-    )
+    let timer = 0
+    loadBlendFeeds()
+      .then(([market, dvp]) => buildBlendCtx(market, dvp, players))
+      .then(
+        (ctx) => live && setBlend({ ctx, error: null }),
+        (e: Error) => {
+          if (!live) return
+          if (blendAttempt === 0) timer = window.setTimeout(() => setBlendAttempt(1), 3000)
+          else setBlend({ ctx: null, error: e.message || 'unknown error' })
+        },
+      )
     return () => {
       live = false
+      window.clearTimeout(timer)
     }
-  }, [mode, blend.ctx, players])
+  }, [mode, blend.ctx, blend.error, blendAttempt, players])
+
+  const retryBlend = () => {
+    setBlend({ ctx: null, error: null })
+    setBlendAttempt((a) => a + 1)
+  }
 
   useEffect(() => {
     if (viewWeek < horizon.start || viewWeek > horizon.end) setViewWeek(horizon.start)
@@ -282,7 +297,14 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
           value={horizon}
           onChange={setHorizon}
         />
-        <ProjectionToggle mode={mode} onChange={switchMode} onInfo={() => setIntro(true)} ctx={blend.ctx} error={blend.error} />
+        <ProjectionToggle
+          mode={mode}
+          onChange={switchMode}
+          onInfo={() => setIntro(true)}
+          onRetry={retryBlend}
+          ctx={blend.ctx}
+          error={blend.error}
+        />
       </div>
 
       {loading && projections.size === 0 ? (
@@ -326,11 +348,12 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
 }
 
 function ProjectionToggle({
-  mode, onChange, onInfo, ctx, error,
+  mode, onChange, onInfo, onRetry, ctx, error,
 }: {
   mode: ProjectionMode
   onChange: (m: ProjectionMode) => void
   onInfo: () => void
+  onRetry: () => void
   ctx: BlendCtx | null
   error: string | null
 }) {
@@ -365,8 +388,15 @@ function ProjectionToggle({
       </button>
       {mode === 'lab' && !ctx && !error && <Spinner />}
       {mode === 'lab' && error && (
-        <span className="text-[11px] text-down" title={error}>
-          Market data unavailable, using Sleeper
+        <span className="flex items-center gap-2 text-[11.5px] text-down" title={`Couldn't load /api/market: ${error}`}>
+          Couldn't reach market data, showing Sleeper's numbers
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-full bg-down/15 px-2.5 py-1 font-semibold transition hover:bg-down/25 active:scale-95"
+          >
+            Retry
+          </button>
         </span>
       )}
     </div>
