@@ -132,6 +132,7 @@ export function TeamPanel(props: Props) {
     ev.drops.length && `${ev.drops.length} dropped`,
   ].filter(Boolean)
   const waiverOptions = ev.options.filter((o) => !ev.rosterAfter.includes(o.id))
+  const taxi = team.taxi.filter((id) => !ev.outgoing.includes(id))
 
   return (
     <section {...bind} className={`min-w-0 rounded-2xl bg-panel transition-shadow ${over ? 'drop-glow drop-over' : 'ring-1 ring-line'}`}>
@@ -252,8 +253,8 @@ export function TeamPanel(props: Props) {
         </Section>
       )}
 
-      {(ev.irAfter.length > 0 || team.taxi.length > 0) && (
-        <Section title="IR / Taxi">
+      {ev.irAfter.length > 0 && (
+        <Section title="IR">
           {ev.irAfter.map((id) => {
             if (ev.stashed.includes(id))
               return row(id, 'IR', 'stashed', {
@@ -270,8 +271,12 @@ export function TeamPanel(props: Props) {
               actions: [{ key: 'activate', label: 'Activate', onClick: () => onMove('activations', id, true) }, trade(id)],
             })
           })}
-          {team.taxi.filter((id) => !ev.outgoing.includes(id)).map((id) => row(id, 'TAXI', null, { actions: [trade(id)] }))}
         </Section>
+      )}
+
+      {/* Dynasty leagues only: most teams have no taxi squad, and then this never shows. */}
+      {taxi.length > 0 && (
+        <Section title="Taxi squad">{taxi.map((id) => row(id, 'TAXI', null, { actions: [trade(id)] }))}</Section>
       )}
     </section>
   )
