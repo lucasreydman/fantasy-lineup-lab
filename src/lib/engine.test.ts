@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { playoffWeeks } from './season'
 import { optimizeLineup, rosterLimit } from './lineup'
 import { scoreStats } from './scoring'
 import { emptyPlan, evaluateTeam, moveTags, type EvalContext, type TeamEnv, type TeamPlan } from './trade'
@@ -124,5 +125,16 @@ describe('bench order', () => {
   it('reads QB, RB, WR, TE, K, then by projection', () => {
     const lu = optimizeLineup(['FLEX'], [p('te', 'TE', 9), p('wr', 'WR', 8), p('k', 'K', 7), p('qb', 'QB', 3), p('rb2', 'RB', 4), p('rb1', 'RB', 6), p('star', 'WR', 30)])
     expect(lu.bench).toEqual(['qb', 'rb1', 'rb2', 'wr', 'te', 'k'])
+  })
+})
+
+describe('playoffWeeks', () => {
+  it('reads the bracket from league settings', () => {
+    expect(playoffWeeks({ playoff_week_start: 15, playoff_teams: 6 })).toEqual({ start: 15, end: 17 })
+    expect(playoffWeeks({ playoff_week_start: 14, playoff_teams: 6 })).toEqual({ start: 14, end: 16 })
+    expect(playoffWeeks({ playoff_week_start: 15, playoff_teams: 4 })).toEqual({ start: 15, end: 16 })
+    expect(playoffWeeks({ playoff_week_start: 15, playoff_teams: 4, playoff_round_type: 1 })).toEqual({ start: 15, end: 17 })
+    expect(playoffWeeks({ playoff_week_start: 14, playoff_teams: 8, playoff_round_type: 2 })).toEqual({ start: 14, end: 18 })
+    expect(playoffWeeks({})).toEqual({ start: 15, end: 17 })
   })
 })

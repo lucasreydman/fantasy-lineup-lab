@@ -3,6 +3,7 @@ import { buildBlendCtx, type BlendCtx } from '../lib/blend'
 import { irEligible, rosterLimit, starterSlots } from '../lib/lineup'
 import { loadBlendFeeds } from '../lib/market'
 import { makeScorer, type ProjectionMode } from '../lib/scoring'
+import { LAST_NFL_WEEK, playoffWeeks } from '../lib/season'
 import { getProjectionsFor } from '../lib/sleeper'
 import { emptyPlan, evaluateTeam, type EvalContext, type TeamEnv, type TeamPlan } from '../lib/trade'
 import type { League, Player, PlayerProjections, Team } from '../lib/types'
@@ -34,9 +35,6 @@ interface Props {
 
 type Moves = Omit<TeamPlan, 'incoming' | 'outgoing'>
 
-const LAST_WEEK = 18
-/** Fantasy seasons end in Week 17; rest-of-season decisions look that far ahead. */
-const SEASON_END = 17
 const owns = (t: Team, id: string) => t.active.includes(id) || t.reserve.includes(id) || t.taxi.includes(id)
 const allPlayers = (t: Team) => [...t.active, ...t.reserve, ...t.taxi]
 const toggle = (list: string[], id: string, on: boolean) =>
@@ -133,11 +131,13 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
     }),
     [league.roster_positions, horizon, scorer, players],
   )
+  // Rest of season = through the league's last playoff week (from its settings).
+  const playoffs = useMemo(() => playoffWeeks(league.settings), [league.settings])
   // Automatic drops, IR moves and pickups are judged on the rest of the season,
   // whatever window is on screen.
   const decide: EvalContext = useMemo(
-    () => ({ ...view, weeks: range(currentWeek, Math.max(currentWeek, SEASON_END)) }),
-    [view, currentWeek],
+    () => ({ ...view, weeks: range(currentWeek, Math.max(currentWeek, playoffs.end)) }),
+    [view, currentWeek, playoffs.end],
   )
 
   const irSlots = Number(league.settings.reserve_slots ?? 0)
@@ -292,8 +292,8 @@ export function Lab({ league, teams, players, currentWeek, initial, onStateChang
       <div className="flex flex-wrap items-center justify-between gap-3">
         <HorizonPicker
           current={currentWeek}
-          lastWeek={LAST_WEEK}
-          regSeasonEnd={(league.settings.playoff_week_start ?? 15) - 1}
+          lastWeek={LAST_NFL_WEEK}
+          playoffs={playoffs}
           value={horizon}
           onChange={setHorizon}
         />
