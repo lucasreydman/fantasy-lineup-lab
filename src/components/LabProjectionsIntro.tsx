@@ -65,10 +65,13 @@ export function LabProjectionsIntro({ ctx, onClose }: { ctx: BlendCtx | null; on
       aria-modal="true"
       aria-labelledby="lab-intro-title"
     >
+      {/* Buttons sit outside the scroll area: on a phone the explanation scrolls, and the
+          live counts loading in must never shift the buttons under a thumb. */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="pop-in safe-bottom max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-panel ring-1 ring-line sm:rounded-3xl"
+        className="pop-in safe-bottom flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-3xl bg-panel ring-1 ring-line sm:rounded-3xl"
       >
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
         <div className="px-6 pt-6 pb-2">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-wr">Projections</div>
           <h2 id="lab-intro-title" className="mt-1 text-[22px] font-bold tracking-tight">
@@ -105,7 +108,8 @@ export function LabProjectionsIntro({ ctx, onClose }: { ctx: BlendCtx | null; on
           Books only price the current week, so later weeks use Sleeper's projection adjusted for matchup. Tap a
           player's points to see how each step moved them; the small number underneath is Sleeper's.
         </div>
-        <div className="flex flex-col gap-2 px-6 pt-5 pb-6 sm:flex-row-reverse">
+        </div>
+        <div className="flex shrink-0 flex-col gap-2 border-t border-line px-6 pt-4 pb-5 sm:flex-row-reverse">
           <button
             type="button"
             autoFocus
