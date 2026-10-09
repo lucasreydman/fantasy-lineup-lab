@@ -1,0 +1,72 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #10131c;
+  --color-panel: #181c28;
+  --color-panel-2: #1f2433;
+  --color-panel-3: #272d3f;
+  --color-line: #2b3245;
+  --color-ink: #f2f4fa;
+  --color-muted: #8a93a8;
+  --color-faint: #5d6579;
+  --color-teal: #00ceb8;
+  --color-up: #1ee3a0;
+  --color-down: #ff4f6d;
+  --color-warn: #ffc94d;
+  --color-qb: #ff2a6d;
+  --color-rb: #00ceb8;
+  --color-wr: #58a7ff;
+  --color-te: #ffae58;
+  --color-k: #bd66ff;
+  --color-def: #d89a6a;
+  --color-idp: #f0d264;
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.drop-glow {
+  box-shadow:
+    0 0 0 2px var(--color-teal),
+    0 0 32px -6px color-mix(in srgb, var(--color-teal) 60%, transparent);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pop-in {
+  animation: pop-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop-in {
+    animation: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 8px;
+}
