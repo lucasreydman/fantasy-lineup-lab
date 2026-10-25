@@ -9,7 +9,7 @@ import { fmt, InjuryTag, PlayerAvatar, PosText, signed, SlotBadge, tierColor, TI
 
 export type RowTag =
   | 'acquired' | 'elevated' | 'benched' | 'drop' | 'autodrop' | 'traded'
-  | 'added' | 'autoadd' | 'activated' | 'autoactivated' | 'stashed' | 'autoir'
+  | 'added' | 'autoadd' | 'activated' | 'autoactivated' | 'stashed' | 'autoir' | 'returned'
 
 const TAG: Record<RowTag, { label: string; className: string }> = {
   acquired: { label: 'NEW', className: 'bg-teal/15 text-teal' },
@@ -24,6 +24,7 @@ const TAG: Record<RowTag, { label: string; className: string }> = {
   autoactivated: { label: 'AUTO OFF IR', className: 'bg-wr/15 text-wr' },
   stashed: { label: 'TO IR', className: 'bg-warn/15 text-warn' },
   autoir: { label: 'AUTO-IR', className: 'bg-warn/15 text-warn' },
+  returned: { label: 'BACK FROM IR', className: 'bg-up/15 text-up' },
 }
 
 export function opponentLabel(proj: PlayerProjections | undefined, week: number) {
@@ -145,6 +146,7 @@ export function PlayerRow({
     e.stopPropagation()
     setSheet(true)
   }
+  const aside = note ?? (replaces ? `replaces ${replaces.name} (${fmt(replaces.points)})` : null)
   const freshNews = flags.some((f) => f.label.startsWith('News in'))
   // A serious problem the injury tag doesn't already say (released, a zero season...).
   const hidden = !player?.injury && flags.some((f) => f.level === 'danger')
@@ -195,13 +197,10 @@ export function PlayerRow({
         <div className="truncate text-[11.5px] text-muted">
           <PosText pos={pos} /> <span>{player?.team ?? 'FA'}</span>
           <span className={`ml-1.5 ${bye ? 'font-semibold text-warn' : ''}`}>{opponent}</span>
-          {note && <span className="ml-2 text-faint">{note}</span>}
-          {!note && replaces && (
-            <span className="ml-2 text-faint">
-              replaces {replaces.name} ({fmt(replaces.points)})
-            </span>
-          )}
+          {aside && <span className="ml-2 text-faint max-sm:hidden">{aside}</span>}
         </div>
+        {/* Phones: its own line, so the name it's about isn't truncated away. */}
+        {aside && <div className="truncate text-[11px] text-faint sm:hidden">{aside}</div>}
       </div>
       <RowActionsInline actions={acts} onMore={() => setSheet(true)} />
       <PointsCell blend={blend ?? null}>

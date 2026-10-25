@@ -74,8 +74,14 @@ export function TeamPanel(props: Props) {
     })
   }
 
+  // IR players back by the week on screen play from the roster; the rest stay on IR.
+  const backBy = new Map(ev.returns.filter((r) => r.week <= week).map((r) => [r.id, r]))
+  const returnOf = new Map(ev.returns.map((r) => [r.id, r]))
+
   const tagFor = (id: string): RowTag | null =>
-    ev.adds.includes(id)
+    backBy.has(id)
+      ? 'returned'
+      : ev.adds.includes(id)
       ? 'added'
       : ev.autoAdds.includes(id)
         ? 'autoadd'
@@ -100,7 +106,7 @@ export function TeamPanel(props: Props) {
       return [{ key: 'decline', label: 'Remove pickup', onClick: () => onMove('declined', id, true) }]
     if (ev.activations.includes(id))
       return [{ key: 'undo', label: 'Back to IR', onClick: () => onMove('activations', id, false) }]
-    if (ev.autoActivations.includes(id))
+    if (ev.autoActivations.includes(id) || backBy.has(id))
       return [{ key: 'decline', label: 'Keep on IR', onClick: () => onMove('declined', id, true) }]
     const out: RowAction[] = []
     if (onBench && props.irRoom > 0 && props.irEligible(id))
@@ -259,20 +265,31 @@ export function TeamPanel(props: Props) {
 
       {ev.irAfter.length > 0 && (
         <Section title="IR">
-          {ev.irAfter.map((id) => {
+          {ev.irAfter.filter((id) => !backBy.has(id)).map((id) => {
+            const ret = returnOf.get(id)
+            const note = ret
+              ? `back Wk ${ret.week}${ret.drop ? ` · cuts ${shortName(players.get(ret.drop), ret.drop)}` : ''}`
+              : undefined
             if (ev.stashed.includes(id))
               return row(id, 'IR', 'stashed', {
                 draggable: false,
+                note,
                 actions: [{ key: 'undo', label: 'Undo', primary: true, onClick: () => onMove('toIr', id, false) }],
               })
             if (ev.autoIr.includes(id))
               return row(id, 'IR', 'autoir', {
                 draggable: false,
+                note,
                 actions: [{ key: 'keep', label: 'Keep active', primary: true, onClick: () => onMove('keeps', id, true) }],
               })
             return row(id, 'IR', null, {
               dragData: `${IR}${id}`,
-              actions: [{ key: 'activate', label: 'Activate', onClick: () => onMove('activations', id, true) }, trade(id)],
+              note,
+              actions: [
+                { key: 'activate', label: 'Activate now', onClick: () => onMove('activations', id, true) },
+                ...(ret ? [{ key: 'decline', label: 'Keep on IR', onClick: () => onMove('declined', id, true) }] : []),
+                trade(id),
+              ],
             })
           })}
         </Section>

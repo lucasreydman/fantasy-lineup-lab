@@ -23,6 +23,9 @@ Deploys to Vercel as-is (pushes to `main` deploy automatically): `api/*.ts` are 
 - **Roster moves** (`src/lib/trade.ts`): after a trade, both rosters are made legal automatically, judged on the **rest of the season** whatever window is on screen:
   - over the limit → stash IR-eligible players first (per the league's IR rules and free slots), then cut whoever costs the optimal lineups least;
   - under the limit → fill each spot with the best pickup or IR activation, re-ranking after each pick.
+  - healthy but still on IR → activate now, cutting the cheapest if the roster is full;
+  - on IR and coming back → activate the first week he's projected to play, cutting the cheapest from that week on.
+  Before and after the trade are played out the same way, so a return you'd get anyway isn't credited to the trade, and trading away a player on IR costs every week he'd have started.
   Every automatic move is tagged and reversible (Keep, Remove pickup, Keep on IR), and you can make your own (Drop, Move to IR, Add, Activate).
 - **Pickups** (`src/lib/waivers.ts`): ranked by what each adds to the optimal lineups. Positionally aware by construction, plus hard caps (no third QB in a one-QB league, no third TE, no second K/DEF) and depth targets that favor the thinnest position.
 

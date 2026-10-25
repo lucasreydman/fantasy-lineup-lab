@@ -121,6 +121,57 @@ describe('evaluateTeam', () => {
   })
 })
 
+describe('IR returns', () => {
+  // 'rice' is out now (IR-eligible) and back from week 3; 'fine' sits on IR but is healthy.
+  const pos: Record<string, string> = { qb: 'QB', rb1: 'RB', rb2: 'RB', wr1: 'WR', wr2: 'WR', wr3: 'WR', rice: 'WR', fine: 'WR', x: 'WR' }
+  const pts: Record<string, number> = { qb: 20, rb1: 15, rb2: 12, wr1: 14, wr2: 9, wr3: 2, fine: 11, x: 1 }
+  const points = (id: string, week: number) => (id === 'rice' ? (week >= 3 ? 16 : 0) : pts[id] ?? 0)
+  const view: EvalContext = { slots: ['QB', 'RB', 'WR', 'FLEX'], limit: 6, weeks: [1, 2, 3, 4], points, positionsOf: (id) => [pos[id]] }
+  const team: Team = {
+    rosterId: 1, name: 'T', ownerName: 'o', avatarUrl: null, ownerIds: [],
+    active: ['qb', 'rb1', 'rb2', 'wr1', 'wr2', 'wr3'], reserve: ['rice'], taxi: [],
+  }
+  const env = (over: Partial<TeamEnv> = {}): TeamEnv => ({
+    view, decide: view, irSlots: 2, irEligible: (id) => id === 'rice', pool: [], posOf: (id) => pos[id], ...over,
+  })
+
+  it('a player you get back anyway is not credited to the trade', () => {
+    const ev = evaluateTeam(team, emptyPlan(), env())
+    expect(ev.returns).toEqual([{ id: 'rice', week: 3, drop: 'wr3' }])
+    expect(ev.delta).toBe(0)
+    // He starts once he's back, in both the before and after lineups.
+    expect(ev.weeks[2].before.slots.some((s) => s.playerId === 'rice')).toBe(true)
+  })
+
+  it('trading away a player on IR costs the weeks he would have started', () => {
+    const ev = evaluateTeam(team, { ...emptyPlan(), outgoing: ['rice'] }, env())
+    expect(ev.weeks[0].after.total - ev.weeks[0].before.total).toBe(0)
+    expect(ev.delta).toBeLessThan(0)
+    expect(ev.weeks[2].after.slots.some((s) => s.playerId === 'rice')).toBe(false)
+  })
+
+  it('an injured player received and stashed on IR still counts from his return', () => {
+    const roster: Team = { ...team, reserve: [] }
+    const ev = evaluateTeam(roster, { ...emptyPlan(), incoming: ['rice'] }, env())
+    expect(ev.autoIr).toEqual(['rice'])
+    expect(ev.returns.map((r) => r.id)).toEqual(['rice'])
+    expect(ev.delta).toBeGreaterThan(0)
+  })
+
+  it('a healthy player on IR comes off now, cutting the cheapest', () => {
+    const roster: Team = { ...team, reserve: ['fine'] }
+    const ev = evaluateTeam(roster, emptyPlan(), env())
+    expect(ev.autoActivations).toEqual(['fine'])
+    expect(ev.autoDrops).toEqual(['wr3'])
+    expect(ev.rosterAfter).toContain('fine')
+  })
+
+  it('keeping a player on IR skips his return', () => {
+    const ev = evaluateTeam(team, { ...emptyPlan(), declined: ['rice'] }, env())
+    expect(ev.returns).toEqual([])
+  })
+})
+
 describe('bench order', () => {
   it('reads QB, RB, WR, TE, K, then by projection', () => {
     const lu = optimizeLineup(['FLEX'], [p('te', 'TE', 9), p('wr', 'WR', 8), p('k', 'K', 7), p('qb', 'QB', 3), p('rb2', 'RB', 4), p('rb1', 'RB', 6), p('star', 'WR', 30)])
